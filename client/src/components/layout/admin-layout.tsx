@@ -1,4 +1,4 @@
-import { Sidebar } from "./sidebar";
+import { Sidebar } from "@/components/layout/sidebar";
 import { Button } from "@/components/ui/button";
 import { Bell, Settings } from "lucide-react";
 import { getCurrentJalaliDate, formatJalaliDateLong } from "@/lib/jalali-utils";

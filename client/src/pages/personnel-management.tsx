@@ -62,7 +62,7 @@ export default function PersonnelManagement() {
   // Queries
   const { data: personnel = [], isLoading } = useQuery({
     queryKey: ["/api/personnel"],
-  });
+  }) as { data: any[]; isLoading: boolean };
 
   // Mutations
   const createMutation = useMutation({

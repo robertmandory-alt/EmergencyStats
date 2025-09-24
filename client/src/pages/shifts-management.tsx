@@ -76,11 +76,11 @@ export default function ShiftsManagement() {
   // Queries
   const { data: workShifts = [], isLoading: isLoadingShifts } = useQuery({
     queryKey: ["/api/work-shifts"],
-  });
+  }) as { data: any[]; isLoading: boolean };
 
   const { data: bases = [], isLoading: isLoadingBases } = useQuery({
     queryKey: ["/api/bases"],
-  });
+  }) as { data: any[]; isLoading: boolean };
 
   // Work Shift Mutations
   const createShiftMutation = useMutation({

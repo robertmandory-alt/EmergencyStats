@@ -68,7 +68,7 @@ export default function UserManagement() {
   // Queries
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["/api/users"],
-  });
+  }) as { data: any[]; isLoading: boolean };
 
   // Mutations
   const createMutation = useMutation({

@@ -40,35 +40,34 @@ export default function AdminDashboard() {
   // Queries
   const { data: personnel = [] } = useQuery({
     queryKey: ["/api/personnel"],
-  });
+  }) as { data: any[] };
 
   const { data: bases = [] } = useQuery({
     queryKey: ["/api/bases"],
-  });
+  }) as { data: any[] };
 
   const { data: workShifts = [] } = useQuery({
     queryKey: ["/api/work-shifts"],
-  });
+  }) as { data: any[] };
 
   const { data: assignments = [] } = useQuery({
     queryKey: ["/api/performance-assignments", filters.year, filters.month],
-    queryKey: ["/api/performance-assignments"],
     queryFn: () => fetch(`/api/performance-assignments?year=${filters.year}&month=${filters.month}`).then(res => res.json()),
-  });
+  }) as { data: any[] };
 
   // Calculate statistics
   const stats = {
     totalPersonnel: personnel.length,
     urbanMissions: assignments.filter((assignment: any) => {
-      const base = bases.find(b => b.id === assignment.baseId);
+      const base = bases.find((b: any) => b.id === assignment.baseId);
       return base?.type === 'urban';
     }).length,
     roadMissions: assignments.filter((assignment: any) => {
-      const base = bases.find(b => b.id === assignment.baseId);
+      const base = bases.find((b: any) => b.id === assignment.baseId);
       return base?.type === 'road';
     }).length,
     totalHours: assignments.reduce((sum: number, assignment: any) => {
-      const shift = workShifts.find(s => s.id === assignment.shiftId);
+      const shift = workShifts.find((s: any) => s.id === assignment.shiftId);
       return sum + (shift?.equivalentHours || 0);
     }, 0),
   };
@@ -119,14 +118,14 @@ export default function AdminDashboard() {
 
   const handleSelectAll = (selected: boolean) => {
     if (selected) {
-      setSelectedPersonnel(filteredPersonnel.map(p => p.id));
+      setSelectedPersonnel(filteredPersonnel.map((p: any) => p.id));
     } else {
       setSelectedPersonnel([]);
     }
   };
 
   const handleCellClick = (personnelId: string, date: string) => {
-    const person = personnel.find(p => p.id === personnelId);
+    const person = personnel.find((p: any) => p.id === personnelId);
     const currentAssignment = assignments.find((a: any) => 
       a.personnelId === personnelId && a.date === date
     );
