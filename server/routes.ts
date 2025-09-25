@@ -42,13 +42,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/users", requireAdmin, async (req, res) => {
+  app.post("/api/users", async (req, res) => {
     try {
+      // Check if any users exist in the system
+      const allUsers = await storage.getAllUsers();
+      const hasExistingUsers = allUsers.length > 0;
+      
+      console.log(`[DEBUG] User creation attempt: hasExistingUsers=${hasExistingUsers}, userCount=${allUsers.length}`);
+      
+      // If users exist, require admin authentication
+      if (hasExistingUsers) {
+        console.log(`[DEBUG] Requiring admin authentication because users exist`);
+        try {
+          const { userRole } = validateUserPermissions(req);
+          if (userRole !== 'admin') {
+            return res.status(403).json({ 
+              error: "دسترسی غیرمجاز: فقط ادمین‌ها دسترسی دارند" 
+            });
+          }
+        } catch (error: any) {
+          if (error.message === 'Authentication required') {
+            return res.status(401).json({ error: "احراز هویت لازم است" });
+          }
+          return res.status(500).json({ error: "خطا در سرور" });
+        }
+      } else {
+        console.log(`[DEBUG] No existing users found, allowing user creation without authentication`);
+      }
+      
       const userData = insertUserSchema.parse(req.body);
       const existingUser = await storage.getUserByUsername(userData.username);
       
       if (existingUser) {
         return res.status(400).json({ error: "نام کاربری قبلاً استفاده شده است" });
+      }
+
+      // If this is the first user, make them an admin
+      if (!hasExistingUsers) {
+        userData.role = 'admin';
       }
 
       const user = await storage.createUser(userData);
