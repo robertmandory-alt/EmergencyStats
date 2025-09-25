@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertUserSchema, insertPersonnelSchema, insertWorkShiftSchema, insertBaseSchema, insertPerformanceAssignmentSchema } from "@shared/schema";
+import { insertUserSchema, insertPersonnelSchema, insertWorkShiftSchema, insertBaseSchema, insertPerformanceAssignmentSchema, insertBaseProfileSchema, insertPerformanceEntrySchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication routes
@@ -19,7 +19,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // In production, use proper session management
-      res.json({ user: { id: user.id, username: user.username, role: user.role } });
+      res.json({ user: { id: user.id, username: user.username, role: user.role, fullName: user.fullName } });
     } catch (error) {
       res.status(500).json({ error: "خطا در سرور" });
     }
@@ -326,6 +326,168 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "خطا در حذف تخصیص" });
+    }
+  });
+
+  // Base Profile routes
+  app.get("/api/base-profile/:userId", async (req, res) => {
+    try {
+      const profile = await storage.getBaseProfile(req.params.userId);
+      
+      if (!profile) {
+        return res.status(404).json({ error: "پروفایل پایگاه یافت نشد" });
+      }
+
+      res.json(profile);
+    } catch (error) {
+      res.status(500).json({ error: "خطا در دریافت پروفایل پایگاه" });
+    }
+  });
+
+  app.post("/api/base-profile", async (req, res) => {
+    try {
+      // Parse and validate the profile data
+      const rawData = insertBaseProfileSchema.parse(req.body);
+      
+      // Security: For now, require explicit userId validation
+      // TODO: In production, derive userId from authenticated session
+      if (!rawData.userId) {
+        return res.status(400).json({ error: "شناسه کاربر الزامی است" });
+      }
+      
+      // Verify the user exists and is active (basic authorization)
+      const user = await storage.getUser(rawData.userId);
+      if (!user || !user.isActive) {
+        return res.status(403).json({ error: "دسترسی غیر مجاز" });
+      }
+      
+      // Only allow regular users to create their own base profiles
+      if (user.role !== 'user') {
+        return res.status(403).json({ error: "تنها کاربران عادی می‌توانند پروفایل پایگاه ایجاد کنند" });
+      }
+      
+      const profile = await storage.createBaseProfile(rawData);
+      res.json(profile);
+    } catch (error: any) {
+      if (error.message === "Base profile already exists for this user") {
+        return res.status(400).json({ error: "پروفایل پایگاه برای این کاربر قبلاً ایجاد شده است" });
+      }
+      res.status(400).json({ error: "داده‌های وارد شده نامعتبر است" });
+    }
+  });
+
+  app.put("/api/base-profile/:userId", async (req, res) => {
+    try {
+      const updates = insertBaseProfileSchema.partial().parse(req.body);
+      
+      // Security: Verify the user exists and is authorized
+      // TODO: In production, ensure userId matches authenticated session
+      const user = await storage.getUser(req.params.userId);
+      if (!user || !user.isActive) {
+        return res.status(403).json({ error: "دسترسی غیر مجاز" });
+      }
+      
+      // Verify a base profile exists for this user
+      const existingProfile = await storage.getBaseProfile(req.params.userId);
+      if (!existingProfile) {
+        return res.status(404).json({ error: "پروفایل پایگاه یافت نشد" });
+      }
+      
+      const profile = await storage.updateBaseProfile(req.params.userId, updates);
+      
+      if (!profile) {
+        return res.status(500).json({ error: "خطا در به‌روزرسانی پروفایل" });
+      }
+
+      res.json(profile);
+    } catch (error) {
+      res.status(400).json({ error: "داده‌های وارد شده نامعتبر است" });
+    }
+  });
+
+  // Performance Entries routes
+  app.get("/api/performance-entries", async (req, res) => {
+    try {
+      const { userId, year, month } = req.query;
+      
+      if (!userId) {
+        return res.status(400).json({ error: "شناسه کاربر الزامی است" });
+      }
+
+      const entries = await storage.getPerformanceEntriesByUser(
+        userId as string,
+        year ? parseInt(year as string) : undefined,
+        month ? parseInt(month as string) : undefined
+      );
+      
+      res.json(entries);
+    } catch (error) {
+      res.status(500).json({ error: "خطا در دریافت عملکرد" });
+    }
+  });
+
+  app.post("/api/performance-entries", async (req, res) => {
+    try {
+      const entryData = insertPerformanceEntrySchema.parse(req.body);
+      const entry = await storage.createPerformanceEntry(entryData);
+      res.json(entry);
+    } catch (error) {
+      res.status(400).json({ error: "داده‌های وارد شده نامعتبر است" });
+    }
+  });
+
+  app.put("/api/performance-entries/:id", async (req, res) => {
+    try {
+      const updates = insertPerformanceEntrySchema.partial().parse(req.body);
+      const entry = await storage.updatePerformanceEntry(req.params.id, updates);
+      
+      if (!entry) {
+        return res.status(404).json({ error: "ورودی عملکرد یافت نشد" });
+      }
+
+      res.json(entry);
+    } catch (error: any) {
+      if (error.message === "Cannot update finalized performance entry") {
+        return res.status(400).json({ error: "امکان ویرایش ورودی نهایی شده وجود ندارد" });
+      }
+      res.status(400).json({ error: "داده‌های وارد شده نامعتبر است" });
+    }
+  });
+
+  app.delete("/api/performance-entries/:id", async (req, res) => {
+    try {
+      const success = await storage.deletePerformanceEntry(req.params.id);
+      
+      if (!success) {
+        return res.status(404).json({ error: "ورودی عملکرد یافت نشد" });
+      }
+
+      res.json({ success: true });
+    } catch (error: any) {
+      if (error.message === "Cannot delete finalized performance entry") {
+        return res.status(400).json({ error: "امکان حذف ورودی نهایی شده وجود ندارد" });
+      }
+      res.status(500).json({ error: "خطا در حذف ورودی عملکرد" });
+    }
+  });
+
+  app.post("/api/performance-entries/finalize", async (req, res) => {
+    try {
+      const { userId, year, month } = req.body;
+      
+      if (!userId || !year || !month) {
+        return res.status(400).json({ error: "شناسه کاربر، سال و ماه الزامی است" });
+      }
+
+      const success = await storage.finalizePerformanceEntries(userId, year, month);
+      
+      if (!success) {
+        return res.status(404).json({ error: "هیچ ورودی برای نهایی شدن یافت نشد" });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "خطا در نهایی کردن ورودی‌ها" });
     }
   });
 
