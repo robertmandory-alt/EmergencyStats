@@ -118,26 +118,25 @@ export function Sidebar() {
             const isActive = location === item.href;
             return (
               <li key={item.name}>
-                <Link href={item.href}>
-                  <a
-                    className={cn(
-                      "flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors",
-                      isActive
-                        ? "bg-primary text-primary-foreground"
-                        : "text-foreground hover:bg-muted"
+                <Link
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors",
+                    isActive
+                      ? "bg-primary text-primary-foreground"
+                      : "text-foreground hover:bg-muted"
+                  )}
+                  data-testid={`link-${item.href.replace('/', '')}`}
+                >
+                  <item.icon className="h-5 w-5" />
+                  <div className="flex-1">
+                    <div>{item.name}</div>
+                    {item.description && (
+                      <div className="text-xs opacity-75 mt-0.5">
+                        {item.description}
+                      </div>
                     )}
-                    data-testid={`link-${item.href.replace('/', '')}`}
-                  >
-                    <item.icon className="h-5 w-5" />
-                    <div className="flex-1">
-                      <div>{item.name}</div>
-                      {item.description && (
-                        <div className="text-xs opacity-75 mt-0.5">
-                          {item.description}
-                        </div>
-                      )}
-                    </div>
-                  </a>
+                  </div>
                 </Link>
               </li>
             );

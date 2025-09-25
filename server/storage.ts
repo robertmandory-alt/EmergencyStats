@@ -28,6 +28,7 @@ export interface IStorage {
   // Personnel
   getPersonnel(id: string): Promise<Personnel | undefined>;
   getAllPersonnel(): Promise<Personnel[]>;
+  getPersonnelByBase(baseName: string, baseNumber: string, baseType: string): Promise<Personnel[]>;
   createPersonnel(personnel: InsertPersonnel): Promise<Personnel>;
   updatePersonnel(id: string, updates: Partial<InsertPersonnel>): Promise<Personnel | undefined>;
   deletePersonnel(id: string): Promise<boolean>;
@@ -313,6 +314,23 @@ export class MemStorage implements IStorage {
       return this.performanceAssignments.delete(assignment.id);
     }
     return false;
+  }
+
+  // Get personnel assigned to a specific base (via performance assignments)
+  async getPersonnelByBase(baseName: string, baseNumber: string, baseType: string): Promise<Personnel[]> {
+    // Get all performance assignments for this base
+    const baseAssignments = Array.from(this.performanceAssignments.values()).filter(assignment => {
+      const base = this.bases.get(assignment.baseId);
+      return base && base.name === baseName && base.number === baseNumber && base.type === baseType;
+    });
+    
+    // Get unique personnel IDs from assignments
+    const personnelIds = Array.from(new Set(baseAssignments.map(assignment => assignment.personnelId)));
+    
+    // Return personnel records for these IDs
+    return personnelIds
+      .map(id => this.personnel.get(id))
+      .filter((person): person is Personnel => person !== undefined);
   }
 
   // Base Profiles

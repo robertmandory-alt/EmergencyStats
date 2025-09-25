@@ -1,5 +1,5 @@
 import { Switch, Route, Redirect } from "wouter";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -57,11 +57,25 @@ function ProfileProtectedRoute({
 }) {
   const { user } = useAuth();
   
-  // Only apply profile check to regular users
-  if (user?.role === 'user') {
-    // TODO: Check if user has completed base profile
-    // For now, redirect to base profile setup if not completed
-    // This will be implemented in task 7
+  // Check if regular user has completed base profile
+  const { data: baseProfile, isLoading, error } = useQuery({
+    queryKey: ['/api/base-profile', user?.id],
+    enabled: !!user?.id && user?.role === 'user',
+    retry: false, // Don't retry on 404 - it just means no profile exists
+  }) as { data: any; isLoading: boolean; error: any };
+  
+  // Show loading while checking profile completion
+  if (isLoading && user?.role === 'user') {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+  
+  // Redirect regular users to base profile setup if not completed or doesn't exist
+  if (user?.role === 'user' && (!baseProfile || !baseProfile?.isComplete)) {
+    return <Redirect to="/base-profile-setup" />;
   }
   
   return <Component {...props} />;
@@ -79,7 +93,11 @@ function Router() {
           <Route path="/" component={() => {
             const { user } = useAuth();
             // Role-based initial redirect
-            return user?.role === 'admin' ? <Redirect to="/dashboard" /> : <Redirect to="/personnel-info" />;
+            // For regular users, check if they have completed base profile
+            if (user?.role === 'user') {
+              return <Redirect to="/personnel-info" />;
+            }
+            return <Redirect to="/dashboard" />;
           }} />
           
           {/* Base Profile Setup - all users */}
@@ -93,9 +111,17 @@ function Router() {
           <Route path="/personnel" component={(props) => <ProtectedRoute component={PersonnelManagement} adminOnly {...props} />} />
           <Route path="/shifts" component={(props) => <ProtectedRoute component={ShiftsManagement} adminOnly {...props} />} />
           
-          {/* Regular user routes */}
-          <Route path="/personnel-info" component={(props) => <ProtectedRoute component={PersonnelInfo} userOnly {...props} />} />
-          <Route path="/performance-log" component={(props) => <ProtectedRoute component={PerformanceLog} userOnly {...props} />} />
+          {/* Regular user routes - protected by profile completion */}
+          <Route path="/personnel-info" component={(props) => (
+            <ProtectedRoute component={(innerProps) => (
+              <ProfileProtectedRoute component={PersonnelInfo} {...innerProps} />
+            )} userOnly {...props} />
+          )} />
+          <Route path="/performance-log" component={(props) => (
+            <ProtectedRoute component={(innerProps) => (
+              <ProfileProtectedRoute component={PerformanceLog} {...innerProps} />
+            )} userOnly {...props} />
+          )} />
         </>
       )}
       
