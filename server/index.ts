@@ -1,10 +1,57 @@
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+
+// Extend Express Request type to include session user
+declare module "express-session" {
+  interface SessionData {
+    user?: {
+      id: string;
+      username: string;
+      role: string;
+      fullName?: string;
+    };
+  }
+}
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Session configuration
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'development-secret-key',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: false, // Set to true in production with HTTPS
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
+
+// Add user to request type for TypeScript
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        id: string;
+        username: string;
+        role: string;
+        fullName?: string;
+      };
+    }
+  }
+}
+
+// Middleware to attach user to request if session exists
+app.use((req, res, next) => {
+  if (req.session?.user) {
+    req.user = req.session.user;
+  }
+  next();
+});
 
 app.use((req, res, next) => {
   const start = Date.now();

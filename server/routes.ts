@@ -18,7 +18,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "نام کاربری یا رمز عبور اشتباه است" });
       }
 
-      // In production, use proper session management
+      // Store user in session for subsequent requests
+      req.session.user = {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        fullName: user.fullName
+      };
+      
       res.json({ user: { id: user.id, username: user.username, role: user.role, fullName: user.fullName } });
     } catch (error) {
       res.status(500).json({ error: "خطا در سرور" });
@@ -108,6 +115,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/personnel/:id", async (req, res) => {
     try {
+      // Validate authentication and get user info
+      const { userRole } = validateUserPermissions(req);
+      
+      // Only admins can do full updates via PUT
+      if (userRole !== 'admin') {
+        return res.status(403).json({ 
+          error: "دسترسی غیرمجاز: فقط ادمین‌ها می‌توانند به‌روزرسانی کامل انجام دهند" 
+        });
+      }
+      
       const updates = insertPersonnelSchema.partial().parse(req.body);
       const person = await storage.updatePersonnel(req.params.id, updates);
       
@@ -116,13 +133,108 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json(person);
-    } catch (error) {
+    } catch (error: any) {
+      if (error.message === 'Authentication required') {
+        return res.status(401).json({ error: "احراز هویت لازم است" });
+      }
+      res.status(400).json({ error: "داده‌های وارد شده نامعتبر است" });
+    }
+  });
+
+  // Helper function to validate user authentication from session
+  function validateUserPermissions(req: any) {
+    // Check if user is authenticated via session
+    if (!req.user || !req.session?.user) {
+      throw new Error('Authentication required');
+    }
+    
+    return {
+      userId: req.user.id,
+      userRole: req.user.role,
+      username: req.user.username
+    };
+  }
+
+  // Middleware to require authentication
+  function requireAuth(req: any, res: any, next: any) {
+    try {
+      validateUserPermissions(req);
+      next();
+    } catch (error: any) {
+      if (error.message === 'Authentication required') {
+        return res.status(401).json({ error: "احراز هویت لازم است" });
+      }
+      return res.status(500).json({ error: "خطا در سرور" });
+    }
+  }
+
+  // Middleware to require admin role
+  function requireAdmin(req: any, res: any, next: any) {
+    try {
+      const { userRole } = validateUserPermissions(req);
+      if (userRole !== 'admin') {
+        return res.status(403).json({ 
+          error: "دسترسی غیرمجاز: فقط ادمین‌ها دسترسی دارند" 
+        });
+      }
+      next();
+    } catch (error: any) {
+      if (error.message === 'Authentication required') {
+        return res.status(401).json({ error: "احراز هویت لازم است" });
+      }
+      return res.status(500).json({ error: "خطا در سرور" });
+    }
+  }
+
+  // PATCH route for partial personnel updates with role-based field restrictions
+  app.patch("/api/personnel/:id", async (req, res) => {
+    try {
+      // Validate authentication and get user info
+      const { userRole } = validateUserPermissions(req);
+      
+      // Parse the partial updates
+      const updates = insertPersonnelSchema.partial().parse(req.body);
+      
+      // For regular users (base supervisors), only allow productivity status updates
+      if (userRole === 'user') {
+        const allowedFields = ['productivityStatus'];
+        const requestedFields = Object.keys(updates);
+        const unauthorizedFields = requestedFields.filter(field => !allowedFields.includes(field));
+        
+        if (unauthorizedFields.length > 0) {
+          return res.status(403).json({ 
+            error: `دسترسی غیرمجاز: فقط به‌روزرسانی وضعیت بهره‌وری مجاز است. فیلدهای غیرمجاز: ${unauthorizedFields.join(', ')}` 
+          });
+        }
+      }
+      
+      const person = await storage.updatePersonnel(req.params.id, updates);
+      
+      if (!person) {
+        return res.status(404).json({ error: "پرسنل یافت نشد" });
+      }
+
+      res.json(person);
+    } catch (error: any) {
+      if (error.message === 'Authentication required') {
+        return res.status(401).json({ error: "احراز هویت لازم است" });
+      }
       res.status(400).json({ error: "داده‌های وارد شده نامعتبر است" });
     }
   });
 
   app.delete("/api/personnel/:id", async (req, res) => {
     try {
+      // Validate authentication and get user info
+      const { userRole } = validateUserPermissions(req);
+      
+      // Only admins can delete personnel
+      if (userRole !== 'admin') {
+        return res.status(403).json({ 
+          error: "دسترسی غیرمجاز: فقط ادمین‌ها می‌توانند پرسنل را حذف کنند" 
+        });
+      }
+      
       const success = await storage.deletePersonnel(req.params.id);
       
       if (!success) {
@@ -130,7 +242,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json({ success: true });
-    } catch (error) {
+    } catch (error: any) {
+      if (error.message === 'Authentication required') {
+        return res.status(401).json({ error: "احراز هویت لازم است" });
+      }
       res.status(500).json({ error: "خطا در حذف پرسنل" });
     }
   });
