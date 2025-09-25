@@ -55,25 +55,31 @@ export default function AdminDashboard() {
     queryFn: () => fetch(`/api/performance-assignments?year=${filters.year}&month=${filters.month}`).then(res => res.json()),
   }) as { data: any[] };
 
+  // Ensure all data is always an array
+  const personnelArray = Array.isArray(personnel) ? personnel : [];
+  const basesArray = Array.isArray(bases) ? bases : [];
+  const workShiftsArray = Array.isArray(workShifts) ? workShifts : [];
+  const assignmentsArray = Array.isArray(assignments) ? assignments : [];
+
   // Calculate statistics
   const stats = {
-    totalPersonnel: personnel.length,
-    urbanMissions: assignments.filter((assignment: any) => {
-      const base = bases.find((b: any) => b.id === assignment.baseId);
+    totalPersonnel: personnelArray.length,
+    urbanMissions: assignmentsArray.filter((assignment: any) => {
+      const base = basesArray.find((b: any) => b.id === assignment.baseId);
       return base?.type === 'urban';
     }).length,
-    roadMissions: assignments.filter((assignment: any) => {
-      const base = bases.find((b: any) => b.id === assignment.baseId);
+    roadMissions: assignmentsArray.filter((assignment: any) => {
+      const base = basesArray.find((b: any) => b.id === assignment.baseId);
       return base?.type === 'road';
     }).length,
-    totalHours: assignments.reduce((sum: number, assignment: any) => {
-      const shift = workShifts.find((s: any) => s.id === assignment.shiftId);
+    totalHours: assignmentsArray.reduce((sum: number, assignment: any) => {
+      const shift = workShiftsArray.find((s: any) => s.id === assignment.shiftId);
       return sum + (shift?.equivalentHours || 0);
     }, 0),
   };
 
   // Filter personnel based on current filters
-  const filteredPersonnel = personnel.filter((person: any) => {
+  const filteredPersonnel = personnelArray.filter((person: any) => {
     if (filters.employmentStatus && person.employmentStatus !== filters.employmentStatus) {
       return false;
     }
@@ -125,8 +131,8 @@ export default function AdminDashboard() {
   };
 
   const handleCellClick = (personnelId: string, date: string) => {
-    const person = personnel.find((p: any) => p.id === personnelId);
-    const currentAssignment = assignments.find((a: any) => 
+    const person = personnelArray.find((p: any) => p.id === personnelId);
+    const currentAssignment = assignmentsArray.find((a: any) => 
       a.personnelId === personnelId && a.date === date
     );
     
@@ -150,9 +156,9 @@ export default function AdminDashboard() {
     try {
       await exportToExcel({
         personnel: filteredPersonnel,
-        assignments,
-        bases,
-        workShifts,
+        assignments: assignmentsArray,
+        bases: basesArray,
+        workShifts: workShiftsArray,
         month: filters.month,
         year: filters.year,
       }, 'comprehensive');
@@ -195,7 +201,7 @@ export default function AdminDashboard() {
         onFiltersChange={handleFiltersChange}
         onApplyFilters={handleApplyFilters}
         onClearFilters={handleClearFilters}
-        bases={bases}
+        bases={basesArray}
       />
       
       <BatchOperations
@@ -207,9 +213,9 @@ export default function AdminDashboard() {
       
       <PerformanceGrid
         personnel={filteredPersonnel}
-        assignments={assignments}
-        bases={bases}
-        workShifts={workShifts}
+        assignments={assignmentsArray}
+        bases={basesArray}
+        workShifts={workShiftsArray}
         selectedPersonnel={selectedPersonnel}
         month={filters.month}
         year={filters.year}
@@ -225,8 +231,8 @@ export default function AdminDashboard() {
         date={shiftModal.date}
         personnelId={shiftModal.personnelId}
         currentAssignment={shiftModal.currentAssignment}
-        bases={bases}
-        workShifts={workShifts}
+        bases={basesArray}
+        workShifts={workShiftsArray}
       />
     </AdminLayout>
   );
