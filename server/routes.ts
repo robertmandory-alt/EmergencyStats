@@ -48,11 +48,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allUsers = await storage.getAllUsers();
       const hasExistingUsers = allUsers.length > 0;
       
-      console.log(`[DEBUG] User creation attempt: hasExistingUsers=${hasExistingUsers}, userCount=${allUsers.length}`);
-      
       // If users exist, require admin authentication
       if (hasExistingUsers) {
-        console.log(`[DEBUG] Requiring admin authentication because users exist`);
         try {
           const { userRole } = validateUserPermissions(req);
           if (userRole !== 'admin') {
@@ -66,8 +63,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           return res.status(500).json({ error: "خطا در سرور" });
         }
-      } else {
-        console.log(`[DEBUG] No existing users found, allowing user creation without authentication`);
       }
       
       const userData = insertUserSchema.parse(req.body);
