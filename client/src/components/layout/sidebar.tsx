@@ -11,7 +11,16 @@ import {
   Hospital,
 } from "lucide-react";
 
-const navigation = [
+// Navigation item type
+interface NavigationItem {
+  name: string;
+  href: string;
+  icon: React.ComponentType<any>;
+  description?: string;
+}
+
+// Admin navigation (full access)
+const adminNavigation: NavigationItem[] = [
   {
     name: "داشبورد و نظارت عملکرد",
     href: "/dashboard",
@@ -32,10 +41,27 @@ const navigation = [
     href: "/shifts",
     icon: Clock,
   },
+  // Removing reports route as it's not implemented yet
+  // {
+  //   name: "گزارشات و خروجی", 
+  //   href: "/reports",
+  //   icon: FileText,
+  // },
+];
+
+// Regular user navigation (restricted to 2 modules)
+const userNavigation: NavigationItem[] = [
   {
-    name: "گزارشات و خروجی",
-    href: "/reports",
+    name: "مدیریت اطلاعات پرسنل",
+    href: "/personnel-info",
+    icon: UserCheck,
+    description: "ویرایش وضعیت بهره‌وری پرسنل"
+  },
+  {
+    name: "ثبت عملکرد",
+    href: "/performance-log",
     icon: FileText,
+    description: "ثبت ماموریت‌ها و وعده‌های غذایی"
   },
 ];
 
@@ -46,6 +72,10 @@ export function Sidebar() {
   const handleLogout = () => {
     logout();
   };
+  
+  // Determine navigation based on user role
+  const navigation = user?.role === 'admin' ? adminNavigation : userNavigation;
+  const isAdmin = user?.role === 'admin';
 
   return (
     <aside className="w-64 bg-card border-l border-border shadow-lg">
@@ -57,7 +87,9 @@ export function Sidebar() {
           </div>
           <div>
             <h2 className="font-bold text-lg">سیستم مدیریت اورژانس</h2>
-            <p className="text-sm text-muted-foreground">پنل مدیریت</p>
+            <p className="text-sm text-muted-foreground">
+              {isAdmin ? "پنل مدیریت" : "پنل سرپرست پایگاه"}
+            </p>
           </div>
         </div>
       </div>
@@ -70,9 +102,11 @@ export function Sidebar() {
           </div>
           <div>
             <p className="font-medium" data-testid="text-username">
-              {user?.username || "مدیر سیستم"}
+              {user?.fullName || user?.username || (isAdmin ? "مدیر سیستم" : "سرپرست پایگاه")}
             </p>
-            <p className="text-sm text-muted-foreground">آنلاین</p>
+            <p className="text-sm text-muted-foreground">
+              {isAdmin ? "مدیر سیستم" : "سرپرست پایگاه"} • آنلاین
+            </p>
           </div>
         </div>
       </div>
@@ -95,7 +129,14 @@ export function Sidebar() {
                     data-testid={`link-${item.href.replace('/', '')}`}
                   >
                     <item.icon className="h-5 w-5" />
-                    {item.name}
+                    <div className="flex-1">
+                      <div>{item.name}</div>
+                      {item.description && (
+                        <div className="text-xs opacity-75 mt-0.5">
+                          {item.description}
+                        </div>
+                      )}
+                    </div>
                   </a>
                 </Link>
               </li>
