@@ -10,6 +10,7 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   role: text("role").notNull().default("user"), // "admin" or "user"
   isActive: boolean("is_active").notNull().default(true),
+  fullName: text("full_name"), // For pre-filling supervisor name
 });
 
 // Personnel table
@@ -39,6 +40,20 @@ export const bases = pgTable("bases", {
   type: text("type").notNull(), // "urban" or "road"
 });
 
+// Base profiles table (one-time setup for regular users)
+export const baseProfiles = pgTable("base_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id).unique(),
+  supervisorName: text("supervisor_name").notNull(),
+  supervisorNationalId: text("supervisor_national_id").notNull(),
+  baseName: text("base_name").notNull(),
+  baseNumber: text("base_number").notNull(),
+  baseType: text("base_type").notNull(), // "urban" or "road"
+  digitalSignature: text("digital_signature"), // Base64 encoded signature image
+  isComplete: boolean("is_complete").notNull().default(false),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 // Performance assignments table
 export const performanceAssignments = pgTable("performance_assignments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -51,9 +66,35 @@ export const performanceAssignments = pgTable("performance_assignments", {
   day: integer("day").notNull(),
 });
 
+// Performance entries table (for missions and meals logging)
+export const performanceEntries = pgTable("performance_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  personnelId: varchar("personnel_id").notNull().references(() => personnel.id),
+  shiftId: varchar("shift_id").notNull().references(() => workShifts.id),
+  date: text("date").notNull(), // Jalali date as string (YYYY-MM-DD)
+  year: integer("year").notNull(),
+  month: integer("month").notNull(),
+  day: integer("day").notNull(),
+  missions: integer("missions").notNull().default(0),
+  meals: integer("meals").notNull().default(0),
+  isFinalized: boolean("is_finalized").notNull().default(false),
+  finalizedAt: text("finalized_at"),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
+});
+
+export const insertBaseProfileSchema = createInsertSchema(baseProfiles).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertPerformanceEntrySchema = createInsertSchema(performanceEntries).omit({
+  id: true,
+  finalizedAt: true,
 });
 
 export const insertPersonnelSchema = createInsertSchema(personnel).omit({
@@ -75,6 +116,12 @@ export const insertPerformanceAssignmentSchema = createInsertSchema(performanceA
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
+
+export type BaseProfile = typeof baseProfiles.$inferSelect;
+export type InsertBaseProfile = z.infer<typeof insertBaseProfileSchema>;
+
+export type PerformanceEntry = typeof performanceEntries.$inferSelect;
+export type InsertPerformanceEntry = z.infer<typeof insertPerformanceEntrySchema>;
 
 export type Personnel = typeof personnel.$inferSelect;
 export type InsertPersonnel = z.infer<typeof insertPersonnelSchema>;
