@@ -339,6 +339,14 @@ export default function PerformanceLoggingPage() {
                 year={selectedYear}
                 month={selectedMonth}
                 personnel={personnelQuery.data || []}
+                performanceLog={performanceLog || null}
+                entries={entries}
+                holidays={holidays}
+                isLoadingLog={isLoadingLog}
+                isLoadingEntries={isLoadingEntries}
+                isLoadingHolidays={isLoadingHolidays}
+                logError={logError}
+                entriesError={entriesError}
                 onCellClick={handleCellClick}
                 onPersonnelClick={handlePersonnelClick}
                 onAddPersonnel={handleAddPersonnel}

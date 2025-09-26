@@ -10,17 +10,24 @@ import {
   formatPersianNumber,
   JALALI_MONTHS 
 } from "@/lib/jalali-utils";
-import { usePerformanceLogWorkflow } from "@/hooks/use-performance-logging";
 import type { 
   PerformanceGridData, 
   CalendarDay 
 } from "@/hooks/use-performance-logging";
-import type { Personnel, PerformanceEntry, IranHoliday } from "@shared/schema";
+import type { Personnel, PerformanceEntry, IranHoliday, PerformanceLog } from "@shared/schema";
 
 interface PerformanceGridProps {
   year: number;
   month: number;
   personnel: Personnel[];
+  performanceLog: PerformanceLog | null;
+  entries: PerformanceEntry[];
+  holidays: IranHoliday[];
+  isLoadingLog: boolean;
+  isLoadingEntries: boolean;
+  isLoadingHolidays: boolean;
+  logError: any;
+  entriesError: any;
   onCellClick: (personnelId: string, date: string) => void;
   onPersonnelClick: (personnelId: string) => void;
   onAddPersonnel: () => void;
@@ -31,34 +38,24 @@ export function PerformanceGrid({
   year,
   month,
   personnel,
+  performanceLog,
+  entries,
+  holidays,
+  isLoadingLog,
+  isLoadingEntries,
+  isLoadingHolidays,
+  logError,
+  entriesError,
   onCellClick,
   onPersonnelClick,
   onAddPersonnel,
   className
 }: PerformanceGridProps) {
-  const {
-    performanceLog,
-    entries,
-    holidays,
-    isLoadingLog,
-    isLoadingEntries,
-    isLoadingHolidays,
-    logError,
-    entriesError
-  } = usePerformanceLogWorkflow(year, month);
 
-  // Generate calendar days for the selected month
+  // Generate calendar days for the selected month (simplified - no holiday highlighting)
   const calendarDays = useMemo(() => {
-    const monthDays = generateJalaliMonthDays(year, month);
-    const holidayMap = new Map(holidays.map(h => [h.date, h]));
-    
-    return monthDays.map(day => ({
-      ...day,
-      isOfficialHoliday: holidayMap.has(day.date),
-      holidayTitle: holidayMap.get(day.date)?.title,
-      isWeekend: day.weekday === 'جمعه'
-    }));
-  }, [year, month, holidays]);
+    return generateJalaliMonthDays(year, month);
+  }, [year, month]);
 
   // Process performance data into grid format
   const gridData = useMemo((): PerformanceGridData[] => {
@@ -173,16 +170,11 @@ export function PerformanceGrid({
                 پرسنل
               </div>
               
-              {/* Day headers */}
+              {/* Day headers - simplified without holiday highlighting */}
               {calendarDays.map((day) => (
                 <div
                   key={day.date}
-                  className={`p-1 text-center text-xs font-medium border rounded ${
-                    day.isWeekend || day.isOfficialHoliday
-                      ? 'bg-yellow-100 dark:bg-yellow-900/20'
-                      : 'bg-muted'
-                  }`}
-                  title={day.isOfficialHoliday ? day.holidayTitle : undefined}
+                  className="p-1 text-center text-xs font-medium border rounded bg-muted"
                   data-testid={`day-header-${day.day}`}
                 >
                   <div>{JALALI_WEEKDAYS_SHORT[day.weekday === 'شنبه' ? 0 : 
@@ -224,7 +216,7 @@ export function PerformanceGrid({
                     <span className="truncate">{personData.personnelName}</span>
                   </Button>
 
-                  {/* Day cells */}
+                  {/* Day cells - simplified without holiday highlighting */}
                   {calendarDays.map((day) => {
                     const entry = personData.entries.get(day.date);
                     const hasShift = entry && entry.shiftId;
@@ -234,9 +226,7 @@ export function PerformanceGrid({
                         key={day.date}
                         variant="outline"
                         className={`h-12 p-1 text-xs border ${
-                          day.isWeekend || day.isOfficialHoliday
-                            ? 'bg-yellow-50 dark:bg-yellow-900/10'
-                            : hasShift 
+                          hasShift 
                             ? 'bg-green-50 dark:bg-green-900/20 border-green-300'
                             : 'bg-white dark:bg-background'
                         }`}
@@ -272,12 +262,8 @@ export function PerformanceGrid({
           </div>
         )}
 
-        {/* Legend */}
+        {/* Legend - simplified */}
         <div className="mt-4 flex flex-wrap gap-4 justify-center text-xs text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-yellow-100 dark:bg-yellow-900/20 border rounded"></div>
-            <span>تعطیل</span>
-          </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-green-50 dark:bg-green-900/20 border border-green-300 rounded"></div>
             <span>شیفت تعریف شده</span>
@@ -301,8 +287,7 @@ interface GridStatsProps {
 export function GridStats({ gridData, calendarDays }: GridStatsProps) {
   const stats = useMemo(() => {
     const totalPersonnel = gridData.length;
-    const totalWorkingDays = calendarDays.filter(day => !day.isWeekend && !day.isOfficialHoliday).length;
-    const totalHolidays = calendarDays.filter(day => day.isWeekend || day.isOfficialHoliday).length;
+    const totalDays = calendarDays.length;
     
     const totalAssignedShifts = gridData.reduce((sum, person) => {
       return sum + Array.from(person.entries.values()).filter(entry => entry.shiftId).length;
@@ -313,8 +298,7 @@ export function GridStats({ gridData, calendarDays }: GridStatsProps) {
 
     return {
       totalPersonnel,
-      totalWorkingDays,
-      totalHolidays,
+      totalDays,
       totalAssignedShifts,
       totalMissions,
       totalMeals
@@ -336,17 +320,10 @@ export function GridStats({ gridData, calendarDays }: GridStatsProps) {
           </div>
           
           <div className="space-y-1">
-            <div className="text-2xl font-bold text-blue-600" data-testid="stat-working-days">
-              {formatPersianNumber(stats.totalWorkingDays)}
+            <div className="text-2xl font-bold text-blue-600" data-testid="stat-days">
+              {formatPersianNumber(stats.totalDays)}
             </div>
-            <div className="text-sm text-muted-foreground">روز کاری</div>
-          </div>
-          
-          <div className="space-y-1">
-            <div className="text-2xl font-bold text-yellow-600" data-testid="stat-holidays">
-              {formatPersianNumber(stats.totalHolidays)}
-            </div>
-            <div className="text-sm text-muted-foreground">روز تعطیل</div>
+            <div className="text-sm text-muted-foreground">روز در ماه</div>
           </div>
           
           <div className="space-y-1">
