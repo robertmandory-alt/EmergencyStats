@@ -39,9 +39,9 @@ export function CellEditorModal({
   } = usePerformanceLogWorkflow(year, month);
 
   // Find existing entry for this personnel and date
-  const existingEntry = entries.find(
+  const existingEntry = Array.isArray(entries) ? entries.find(
     entry => entry.personnelId === personnel?.id && entry.date === date
-  );
+  ) : undefined;
 
   // Reset form when modal opens/closes or personnel changes
   useEffect(() => {

@@ -63,7 +63,7 @@ export function PerformanceGrid({
     if (!entries || !Array.isArray(entries)) return [];
 
     return personnel.map(person => {
-      const personEntries = entries.filter(entry => entry.personnelId === person.id);
+      const personEntries = Array.isArray(entries) ? entries.filter(entry => entry.personnelId === person.id) : [];
       const entriesMap = new Map(
         personEntries.map(entry => [entry.date || '', entry])
       );

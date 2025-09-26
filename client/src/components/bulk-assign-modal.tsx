@@ -86,7 +86,7 @@ export function BulkAssignModal({
 
   // Find existing entries for this personnel (stabilized to prevent re-renders)
   const existingEntries = useMemo(() => {
-    if (!personnel) return [];
+    if (!personnel || !Array.isArray(entries)) return [];
     return entries.filter(entry => entry.personnelId === personnel.id);
   }, [entries, personnel?.id]); // Only depend on personnel.id, not the whole personnel object
 
