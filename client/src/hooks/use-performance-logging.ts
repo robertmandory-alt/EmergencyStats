@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type {
@@ -18,12 +19,16 @@ export function usePerformanceLogs() {
 }
 
 export function usePerformanceLog(year: number, month: number) {
+  // Use state to disable queries after first 404 to prevent endless polling
+  const [has404Error, setHas404Error] = useState(false);
+  
   return useQuery<PerformanceLog>({
     queryKey: ["/api/performance-logs", year.toString(), month.toString()],
-    enabled: !!(year && month),
+    enabled: !!(year && month) && !has404Error,
     retry: (failureCount, error) => {
       // Don't retry on 404 errors - the log simply doesn't exist yet
       if (error && typeof error === 'object' && 'status' in error && error.status === 404) {
+        setHas404Error(true);
         return false;
       }
       // Only retry up to 2 times for other errors
@@ -31,6 +36,8 @@ export function usePerformanceLog(year: number, month: number) {
     },
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
     staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchInterval: false, // Disable automatic refetch
+    refetchOnWindowFocus: false, // Disable refetch on window focus
   });
 }
 
