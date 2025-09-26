@@ -66,9 +66,9 @@ export default function PerformanceLog() {
   const [meals, setMeals] = useState("");
   const [editingEntry, setEditingEntry] = useState<PerformanceEntry | null>(null);
 
-  // Queries
+  // Queries - fetch base members instead of all personnel
   const { data: personnel = [], isLoading: isLoadingPersonnel } = useQuery({
-    queryKey: ["/api/personnel"],
+    queryKey: ["/api/base-members"],
   }) as { data: Personnel[]; isLoading: boolean };
 
   const { data: shifts = [], isLoading: isLoadingShifts } = useQuery({
@@ -193,7 +193,7 @@ export default function PerformanceLog() {
     setSelectedDay(entry.day);
     setEditingEntry(entry);
     setSelectedPersonnel(entry.personnelId);
-    setSelectedShift(entry.shiftId);
+    setSelectedShift(entry.shiftId || "");
     setMissions(entry.missions.toString());
     setMeals(entry.meals.toString());
     setIsModalOpen(true);

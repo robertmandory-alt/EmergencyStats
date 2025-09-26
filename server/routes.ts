@@ -146,6 +146,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // New endpoint for personnel selection - allows all users to see all personnel for base member selection
+  app.get("/api/all-personnel", requireAuth, async (req, res) => {
+    try {
+      // Both admins and regular users can see all personnel for selection purposes
+      const personnel = await storage.getAllPersonnel();
+      res.json(personnel);
+    } catch (error: any) {
+      res.status(500).json({ error: "خطا در دریافت فهرست پرسنل" });
+    }
+  });
+
   app.post("/api/personnel", requireAuth, requireAdmin, async (req, res) => {
     try {
       const personnelData = insertPersonnelSchema.parse(req.body);

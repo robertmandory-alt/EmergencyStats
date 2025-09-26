@@ -43,9 +43,9 @@ export default function BaseMembers() {
   const [selectedPersonnelId, setSelectedPersonnelId] = useState("");
   const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
 
-  // Queries
+  // Queries - use all-personnel endpoint to allow regular users to see all personnel for selection
   const { data: personnel = [], isLoading: isLoadingPersonnel } = useQuery({
-    queryKey: ["/api/personnel"],
+    queryKey: ["/api/all-personnel"],
   }) as { data: Personnel[]; isLoading: boolean };
 
   const { data: baseMembers = [], isLoading: isLoadingMembers } = useQuery({
