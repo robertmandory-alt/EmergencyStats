@@ -59,7 +59,8 @@ export function PerformanceGrid({
 
   // Process performance data into grid format
   const gridData = useMemo((): PerformanceGridData[] => {
-    if (!personnel.length) return [];
+    if (!personnel || !personnel.length) return [];
+    if (!entries || !Array.isArray(entries)) return [];
 
     return personnel.map(person => {
       const personEntries = entries.filter(entry => entry.personnelId === person.id);

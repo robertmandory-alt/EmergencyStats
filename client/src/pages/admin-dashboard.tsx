@@ -4,7 +4,7 @@ import { AdminLayout } from "@/components/layout/admin-layout";
 import { StatsCards } from "@/components/stats-cards";
 import { FiltersPanel } from "@/components/filters-panel";
 import { BatchOperations } from "@/components/batch-operations";
-import { PerformanceGrid } from "@/components/performance-grid";
+import { AdminPerformanceGrid } from "@/components/admin-performance-grid";
 import { ShiftModal } from "@/components/shift-modal";
 import { useToast } from "@/hooks/use-toast";
 import { getCurrentJalaliDate } from "@/lib/jalali-utils";
@@ -211,7 +211,7 @@ export default function AdminDashboard() {
         onExportImage={handleExportImage}
       />
       
-      <PerformanceGrid
+      <AdminPerformanceGrid
         personnel={filteredPersonnel}
         assignments={assignmentsArray}
         bases={basesArray}
