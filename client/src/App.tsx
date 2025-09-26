@@ -14,7 +14,11 @@ import BaseProfileSetup from "@/pages/base-profile-setup";
 import NotFound from "@/pages/not-found";
 
 // Regular user pages
-import UserDashboard from "@/pages/user-dashboard";
+import UserHome from "@/pages/user-home";
+import BaseInfo from "@/pages/base-info";
+import BaseMembers from "@/pages/base-members";
+import Performance from "@/pages/performance";
+import Reports from "@/pages/reports";
 
 // Protected route component with role-based access control
 function ProtectedRoute({ 
@@ -64,15 +68,29 @@ function Router() {
           {/* Base Profile Setup - all users */}
           <Route path="/base-profile-setup" component={BaseProfileSetup} />
           
-          {/* Role-based dashboard - protected */}
+          {/* Admin dashboard - protected */}
           <Route path="/dashboard" component={(props) => {
             const { user } = useAuth();
             if (user?.role === 'admin') {
               return <ProtectedRoute component={AdminDashboard} adminOnly {...props} />;
             } else {
-              return <ProtectedRoute component={UserDashboard} userOnly {...props} />;
+              return <ProtectedRoute component={UserHome} userOnly {...props} />;
             }
           }} />
+          
+          {/* User section routes */}
+          <Route path="/base-info">
+            <ProtectedRoute component={BaseInfo} userOnly />
+          </Route>
+          <Route path="/base-members">
+            <ProtectedRoute component={BaseMembers} userOnly />
+          </Route>
+          <Route path="/performance">
+            <ProtectedRoute component={Performance} userOnly />
+          </Route>
+          <Route path="/reports">
+            <ProtectedRoute component={Reports} userOnly />
+          </Route>
           
           {/* Admin-only routes */}
           <Route path="/users" component={(props) => <ProtectedRoute component={UserManagement} adminOnly {...props} />} />
