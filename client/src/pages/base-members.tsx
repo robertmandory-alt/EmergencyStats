@@ -60,7 +60,7 @@ export default function BaseMembers() {
   // Add member mutation
   const addMemberMutation = useMutation({
     mutationFn: async (personnelId: string) => {
-      return apiRequest("/api/base-members", "POST", { personnelId });
+      return apiRequest("POST", "/api/base-members", { personnelId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/base-members"] });
@@ -82,7 +82,7 @@ export default function BaseMembers() {
   // Remove member mutation
   const removeMemberMutation = useMutation({
     mutationFn: async (personnelId: string) => {
-      return apiRequest(`/api/base-members/${personnelId}`, "DELETE");
+      return apiRequest("DELETE", `/api/base-members/${personnelId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/base-members"] });

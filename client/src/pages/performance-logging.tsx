@@ -22,10 +22,10 @@ import { getCurrentJalaliDate, JALALI_MONTHS, formatPersianNumber } from "@/lib/
 import { usePerformanceLogWorkflow } from "@/hooks/use-performance-logging";
 import type { Personnel, WorkShift, InsertPerformanceEntry } from "@shared/schema";
 
-// Real data hooks using React Query
+// Real data hooks using React Query - fetch base members instead of all personnel
 function usePersonnel() {
   return useQuery({
-    queryKey: ['/api/personnel'],
+    queryKey: ['/api/base-members'],
     staleTime: 5 * 60 * 1000, // 5 minutes
     retry: 2
   }) as {
