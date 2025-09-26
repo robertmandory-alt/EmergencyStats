@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertUserSchema, insertPersonnelSchema, insertWorkShiftSchema, insertBaseSchema, insertPerformanceAssignmentSchema, insertBaseProfileSchema, insertPerformanceEntrySchema, insertPerformanceLogSchema, insertIranHolidaySchema } from "@shared/schema";
+import { insertUserSchema, insertPersonnelSchema, insertWorkShiftSchema, insertBaseSchema, insertPerformanceAssignmentSchema, insertBaseProfileSchema, insertPerformanceEntrySchema, insertPerformanceLogSchema, insertIranHolidaySchema, insertBaseMemberSchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication routes
@@ -605,6 +605,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "احراز هویت لازم است" });
       }
       res.status(400).json({ error: "داده‌های وارد شده نامعتبر است" });
+    }
+  });
+
+  // Base Members routes
+  app.get("/api/base-members", async (req, res) => {
+    try {
+      // Require authentication and use session user ID
+      const { userId } = validateUserPermissions(req);
+      
+      const members = await storage.getBaseMembersByUser(userId);
+      res.json(members);
+    } catch (error: any) {
+      if (error.message === 'Authentication required') {
+        return res.status(401).json({ error: "احراز هویت لازم است" });
+      }
+      res.status(500).json({ error: "خطا در دریافت اعضای پایگاه" });
+    }
+  });
+
+  app.post("/api/base-members", async (req, res) => {
+    try {
+      // Require authentication and use session user ID
+      const { userId } = validateUserPermissions(req);
+      
+      const { personnelId } = req.body;
+      if (!personnelId) {
+        return res.status(400).json({ error: "شناسه پرسنل الزامی است" });
+      }
+
+      // Verify personnel exists
+      const personnel = await storage.getPersonnel(personnelId);
+      if (!personnel) {
+        return res.status(404).json({ error: "پرسنل یافت نشد" });
+      }
+
+      const member = await storage.addBaseMember(userId, personnelId);
+      
+      // Return the personnel object instead of the base member record
+      res.json(personnel);
+    } catch (error: any) {
+      if (error.message === 'Authentication required') {
+        return res.status(401).json({ error: "احراز هویت لازم است" });
+      }
+      if (error.message === "This personnel is already a base member") {
+        return res.status(400).json({ error: "این پرسنل قبلاً عضو پایگاه است" });
+      }
+      res.status(400).json({ error: "خطا در افزودن عضو به پایگاه" });
+    }
+  });
+
+  app.delete("/api/base-members/:personnelId", async (req, res) => {
+    try {
+      // Require authentication and use session user ID
+      const { userId } = validateUserPermissions(req);
+      
+      const success = await storage.removeBaseMember(userId, req.params.personnelId);
+      
+      if (!success) {
+        return res.status(404).json({ error: "عضو پایگاه یافت نشد" });
+      }
+
+      res.json({ success: true });
+    } catch (error: any) {
+      if (error.message === 'Authentication required') {
+        return res.status(401).json({ error: "احراز هویت لازم است" });
+      }
+      res.status(500).json({ error: "خطا در حذف عضو از پایگاه" });
     }
   });
 

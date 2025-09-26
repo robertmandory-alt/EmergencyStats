@@ -16,7 +16,9 @@ import {
   type PerformanceLog,
   type InsertPerformanceLog,
   type IranHoliday,
-  type InsertIranHoliday
+  type InsertIranHoliday,
+  type BaseMember,
+  type InsertBaseMember
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
@@ -90,6 +92,11 @@ export interface IStorage {
   getHolidaysByMonth(year: number, month: number): Promise<IranHoliday[]>;
   createHoliday(holiday: InsertIranHoliday): Promise<IranHoliday>;
   deleteHoliday(id: string): Promise<boolean>;
+  
+  // Base Members
+  getBaseMembersByUser(userId: string): Promise<Personnel[]>;
+  addBaseMember(userId: string, personnelId: string): Promise<BaseMember>;
+  removeBaseMember(userId: string, personnelId: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -102,6 +109,7 @@ export class MemStorage implements IStorage {
   private performanceEntries: Map<string, PerformanceEntry>;
   private performanceLogs: Map<string, PerformanceLog>;
   private iranHolidays: Map<string, IranHoliday>;
+  private baseMembers: Map<string, BaseMember>;
 
   constructor() {
     this.users = new Map();
@@ -113,6 +121,7 @@ export class MemStorage implements IStorage {
     this.performanceEntries = new Map();
     this.performanceLogs = new Map();
     this.iranHolidays = new Map();
+    this.baseMembers = new Map();
     
     // Initialize default admin user
     this.initializeDefaultData();
@@ -224,6 +233,23 @@ export class MemStorage implements IStorage {
       createdAt: new Date().toISOString()
     };
     this.baseProfiles.set(emsBaseProfile.id, emsBaseProfile);
+
+    // Add default base members for ems user (first two personnel)
+    const defaultBaseMembersForEms = [
+      {
+        id: randomUUID(),
+        userId: emsUser.id,
+        personnelId: defaultPersonnel[0].id, // علی محمدی
+        addedAt: new Date()
+      },
+      {
+        id: randomUUID(),
+        userId: emsUser.id,
+        personnelId: defaultPersonnel[1].id, // حسن احمدی
+        addedAt: new Date()
+      }
+    ];
+    defaultBaseMembersForEms.forEach(member => this.baseMembers.set(member.id, member));
   }
 
   // Users
@@ -643,6 +669,47 @@ export class MemStorage implements IStorage {
 
   async deleteHoliday(id: string): Promise<boolean> {
     return this.iranHolidays.delete(id);
+  }
+
+  // Base Members methods
+  async getBaseMembersByUser(userId: string): Promise<Personnel[]> {
+    const memberRecords = Array.from(this.baseMembers.values()).filter(
+      member => member.userId === userId
+    );
+    const personnelIds = memberRecords.map(member => member.personnelId);
+    return Array.from(this.personnel.values()).filter(
+      person => personnelIds.includes(person.id)
+    );
+  }
+
+  async addBaseMember(userId: string, personnelId: string): Promise<BaseMember> {
+    // Check if this combination already exists
+    const existing = Array.from(this.baseMembers.values()).find(
+      member => member.userId === userId && member.personnelId === personnelId
+    );
+    if (existing) {
+      throw new Error("This personnel is already a base member");
+    }
+
+    const id = randomUUID();
+    const baseMember: BaseMember = {
+      id,
+      userId,
+      personnelId,
+      addedAt: new Date()
+    };
+    this.baseMembers.set(id, baseMember);
+    return baseMember;
+  }
+
+  async removeBaseMember(userId: string, personnelId: string): Promise<boolean> {
+    const existing = Array.from(this.baseMembers.values()).find(
+      member => member.userId === userId && member.personnelId === personnelId
+    );
+    if (!existing) {
+      return false;
+    }
+    return this.baseMembers.delete(existing.id);
   }
 }
 

@@ -41,7 +41,6 @@ export default function BaseMembers() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [selectedPersonnelId, setSelectedPersonnelId] = useState("");
-  const [selectedMembers, setSelectedMembers] = useState<Personnel[]>([]);
   const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
 
   // Queries
@@ -49,20 +48,23 @@ export default function BaseMembers() {
     queryKey: ["/api/personnel"],
   }) as { data: Personnel[]; isLoading: boolean };
 
-  // Get available personnel (not already in selected members)
+  const { data: baseMembers = [], isLoading: isLoadingMembers } = useQuery({
+    queryKey: ["/api/base-members"],
+  }) as { data: Personnel[]; isLoading: boolean };
+
+  // Get available personnel (not already in base members)
   const availablePersonnel = personnel.filter(
-    person => !selectedMembers.find(member => member.id === person.id)
+    person => !baseMembers.find(member => member.id === person.id)
   );
 
   // Add member mutation
   const addMemberMutation = useMutation({
     mutationFn: async (personnelId: string) => {
-      // Note: This is a placeholder implementation
-      // In a full implementation, this would save the member to the database
-      console.log('Adding base member:', personnelId);
-      return Promise.resolve({ personnelId });
+      return apiRequest("/api/base-members", "POST", { personnelId });
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/base-members"] });
+      setSelectedPersonnelId("");
       toast({
         title: "موفقیت",
         description: "عضو جدید با موفقیت به پایگاه اضافه شد",
@@ -80,12 +82,11 @@ export default function BaseMembers() {
   // Remove member mutation
   const removeMemberMutation = useMutation({
     mutationFn: async (personnelId: string) => {
-      // Note: This is a placeholder implementation
-      // In a full implementation, this would remove the member from the database
-      console.log('Removing base member:', personnelId);
-      return Promise.resolve({ personnelId });
+      return apiRequest(`/api/base-members/${personnelId}`, "DELETE");
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/base-members"] });
+      setRemoveConfirmId(null);
       toast({
         title: "موفقیت",
         description: "عضو با موفقیت از پایگاه حذف شد",
@@ -111,21 +112,14 @@ export default function BaseMembers() {
       return;
     }
 
-    const selectedPerson = personnel.find(p => p.id === selectedPersonnelId);
-    if (selectedPerson) {
-      setSelectedMembers(prev => [...prev, selectedPerson]);
-      addMemberMutation.mutate(selectedPersonnelId);
-      setSelectedPersonnelId(""); // Reset selection
-    }
+    addMemberMutation.mutate(selectedPersonnelId);
   };
 
   const handleRemoveMember = (personnelId: string) => {
-    setSelectedMembers(prev => prev.filter(member => member.id !== personnelId));
     removeMemberMutation.mutate(personnelId);
-    setRemoveConfirmId(null);
   };
 
-  const isLoading = isLoadingPersonnel;
+  const isLoading = isLoadingPersonnel || isLoadingMembers;
 
   if (isLoading) {
     return (
@@ -216,22 +210,22 @@ export default function BaseMembers() {
                 <div>
                   <CardTitle>اعضای فعلی پایگاه</CardTitle>
                   <CardDescription>
-                    {selectedMembers.length} نفر در پایگاه ثبت شده‌اند
+                    {baseMembers.length} نفر در پایگاه ثبت شده‌اند
                   </CardDescription>
                 </div>
               </div>
-              {selectedMembers.length > 0 && (
+              {baseMembers.length > 0 && (
                 <Badge variant="secondary" className="gap-1">
                   <UserCheck className="h-3 w-3" />
-                  {selectedMembers.length} عضو
+                  {baseMembers.length} عضو
                 </Badge>
               )}
             </div>
           </CardHeader>
           <CardContent>
-            {selectedMembers.length > 0 ? (
+            {baseMembers.length > 0 ? (
               <div className="space-y-4">
-                {selectedMembers.map((member) => (
+                {baseMembers.map((member: Personnel) => (
                   <div
                     key={member.id}
                     className="flex items-center justify-between p-4 border rounded-lg bg-background"
@@ -306,7 +300,7 @@ export default function BaseMembers() {
         </Card>
 
         {/* Summary Card */}
-        {selectedMembers.length > 0 && (
+        {baseMembers.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle>خلاصه آماری اعضای پایگاه</CardTitle>
@@ -315,21 +309,21 @@ export default function BaseMembers() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="text-center p-4 bg-muted/50 rounded-lg">
                   <div className="text-2xl font-bold text-green-600">
-                    {selectedMembers.filter(m => m.productivityStatus === "productive").length}
+                    {baseMembers.filter((m: Personnel) => m.productivityStatus === "productive").length}
                   </div>
                   <div className="text-sm text-muted-foreground">اعضای بهره‌ور</div>
                 </div>
                 
                 <div className="text-center p-4 bg-muted/50 rounded-lg">
                   <div className="text-2xl font-bold text-blue-600">
-                    {selectedMembers.filter(m => m.employmentStatus === "official").length}
+                    {baseMembers.filter((m: Personnel) => m.employmentStatus === "official").length}
                   </div>
                   <div className="text-sm text-muted-foreground">پرسنل رسمی</div>
                 </div>
                 
                 <div className="text-center p-4 bg-muted/50 rounded-lg">
                   <div className="text-2xl font-bold text-orange-600">
-                    {selectedMembers.filter(m => m.driverStatus === "driver").length}
+                    {baseMembers.filter((m: Personnel) => m.driverStatus === "driver").length}
                   </div>
                   <div className="text-sm text-muted-foreground">راننده‌ها</div>
                 </div>

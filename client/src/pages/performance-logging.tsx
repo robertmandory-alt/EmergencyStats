@@ -277,7 +277,7 @@ export default function PerformanceLoggingPage() {
                   {JALALI_MONTHS[selectedMonth - 1]} {formatPersianNumber(selectedYear)}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  {formatPersianNumber(entries.length)} ورودی ثبت شده
+                  {formatPersianNumber(entries?.length || 0)} ورودی ثبت شده
                 </div>
               </div>
             </div>

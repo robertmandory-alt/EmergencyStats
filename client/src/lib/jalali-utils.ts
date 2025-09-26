@@ -94,7 +94,10 @@ export function parseJalaliDate(dateString: string): JalaliDate {
   return { year, month, day };
 }
 
-export function formatPersianNumber(num: number): string {
+export function formatPersianNumber(num: number | undefined | null): string {
   const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+  if (num === undefined || num === null || isNaN(num)) {
+    return '۰';
+  }
   return num.toString().replace(/\d/g, (digit) => persianDigits[parseInt(digit)]);
 }

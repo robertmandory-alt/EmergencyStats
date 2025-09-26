@@ -106,6 +106,16 @@ export const performanceEntries = pgTable("performance_entries", {
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`),
 });
 
+// Base members table (junction table for user's base personnel)
+export const baseMembers = pgTable("base_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  personnelId: varchar("personnel_id").notNull().references(() => personnel.id),
+  addedAt: timestamp("added_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  userPersonnelUnique: unique().on(table.userId, table.personnelId),
+}));
+
 // Iranian holidays table
 export const iranHolidays = pgTable("iran_holidays", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -162,6 +172,11 @@ export const insertPerformanceAssignmentSchema = createInsertSchema(performanceA
   id: true,
 });
 
+export const insertBaseMemberSchema = createInsertSchema(baseMembers).omit({
+  id: true,
+  addedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -189,3 +204,6 @@ export type InsertBase = z.infer<typeof insertBaseSchema>;
 
 export type PerformanceAssignment = typeof performanceAssignments.$inferSelect;
 export type InsertPerformanceAssignment = z.infer<typeof insertPerformanceAssignmentSchema>;
+
+export type BaseMember = typeof baseMembers.$inferSelect;
+export type InsertBaseMember = z.infer<typeof insertBaseMemberSchema>;
