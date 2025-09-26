@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertUserSchema, insertPersonnelSchema, insertWorkShiftSchema, insertBaseSchema, insertPerformanceAssignmentSchema, insertBaseProfileSchema, insertPerformanceEntrySchema } from "@shared/schema";
+import { insertUserSchema, insertPersonnelSchema, insertWorkShiftSchema, insertBaseSchema, insertPerformanceAssignmentSchema, insertBaseProfileSchema, insertPerformanceEntrySchema, insertPerformanceLogSchema, insertIranHolidaySchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication routes
@@ -729,7 +729,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "سال و ماه الزامی است" });
       }
 
-      const success = await storage.finalizePerformanceEntries(userId, year, month);
+      // Find or create performance log for this period
+      let performanceLog = await storage.getPerformanceLogByUserAndPeriod(userId, year, month);
+      
+      if (!performanceLog) {
+        return res.status(404).json({ error: "لاگ عملکرد برای این دوره یافت نشد" });
+      }
+      
+      const finalizedLog = await storage.finalizePerformanceLog(performanceLog.id);
+      const success = !!finalizedLog;
       
       if (!success) {
         return res.status(404).json({ error: "هیچ ورودی برای نهایی شدن یافت نشد" });
@@ -741,6 +749,273 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "احراز هویت لازم است" });
       }
       res.status(500).json({ error: "خطا در نهایی کردن ورودی‌ها" });
+    }
+  });
+
+  // Performance Logs routes (New Performance Logging Module)
+  app.get("/api/performance-logs", async (req, res) => {
+    try {
+      const { userId, userRole } = validateUserPermissions(req);
+      
+      if (userRole === 'admin') {
+        // Admins can see all logs
+        const { userId: targetUserId } = req.query;
+        if (targetUserId) {
+          const logs = await storage.getPerformanceLogsByUser(targetUserId as string);
+          res.json(logs);
+        } else {
+          // Return all logs for all users - could implement pagination here
+          const allUsers = await storage.getAllUsers();
+          const allLogs = await Promise.all(
+            allUsers.map(user => storage.getPerformanceLogsByUser(user.id))
+          );
+          res.json(allLogs.flat());
+        }
+      } else {
+        // Regular users can only see their own logs
+        const logs = await storage.getPerformanceLogsByUser(userId);
+        res.json(logs);
+      }
+    } catch (error: any) {
+      if (error.message === 'Authentication required') {
+        return res.status(401).json({ error: "احراز هویت لازم است" });
+      }
+      res.status(500).json({ error: "خطا در دریافت لاگ‌های عملکرد" });
+    }
+  });
+
+  app.get("/api/performance-logs/:year/:month", async (req, res) => {
+    try {
+      const { userId } = validateUserPermissions(req);
+      const year = parseInt(req.params.year);
+      const month = parseInt(req.params.month);
+      
+      const performanceLog = await storage.getPerformanceLogByUserAndPeriod(userId, year, month);
+      
+      if (!performanceLog) {
+        return res.status(404).json({ error: "لاگ عملکرد برای این دوره یافت نشد" });
+      }
+
+      res.json(performanceLog);
+    } catch (error: any) {
+      if (error.message === 'Authentication required') {
+        return res.status(401).json({ error: "احراز هویت لازم است" });
+      }
+      res.status(500).json({ error: "خطا در دریافت لاگ عملکرد" });
+    }
+  });
+
+  app.post("/api/performance-logs", async (req, res) => {
+    try {
+      const { userId } = validateUserPermissions(req);
+      const logData = insertPerformanceLogSchema.parse(req.body);
+      
+      // Override userId with session user
+      logData.userId = userId;
+      
+      // Check if log already exists for this period
+      const existing = await storage.getPerformanceLogByUserAndPeriod(userId, logData.year, logData.month);
+      if (existing) {
+        return res.status(400).json({ error: "لاگ عملکرد برای این دوره قبلاً ایجاد شده است" });
+      }
+
+      // Get user's base info for baseId
+      const baseProfile = await storage.getBaseProfile(userId);
+      if (!baseProfile || !baseProfile.isComplete) {
+        return res.status(403).json({ error: "پروفایل پایگاه تکمیل نشده است" });
+      }
+      
+      // Find the baseId based on profile
+      const bases = await storage.getAllBases();
+      const userBase = bases.find(base => 
+        base.name === baseProfile.baseName && 
+        base.number === baseProfile.baseNumber && 
+        base.type === baseProfile.baseType
+      );
+      
+      if (!userBase) {
+        return res.status(404).json({ error: "پایگاه مربوطه یافت نشد" });
+      }
+      
+      logData.baseId = userBase.id;
+
+      const log = await storage.createPerformanceLog(logData);
+      res.json(log);
+    } catch (error: any) {
+      if (error.message === 'Authentication required') {
+        return res.status(401).json({ error: "احراز هویت لازم است" });
+      }
+      res.status(400).json({ error: "داده‌های وارد شده نامعتبر است" });
+    }
+  });
+
+  app.put("/api/performance-logs/:id", async (req, res) => {
+    try {
+      const { userId } = validateUserPermissions(req);
+      const updates = insertPerformanceLogSchema.partial().parse(req.body);
+      
+      // Verify ownership
+      const existingLog = await storage.getPerformanceLog(req.params.id);
+      if (!existingLog) {
+        return res.status(404).json({ error: "لاگ عملکرد یافت نشد" });
+      }
+      
+      if (existingLog.userId !== userId) {
+        return res.status(403).json({ error: "دسترسی غیرمجاز: این لاگ متعلق به شما نیست" });
+      }
+      
+      // Prevent updates to finalized logs
+      if (existingLog.status === 'finalized') {
+        return res.status(400).json({ error: "امکان ویرایش لاگ نهایی شده وجود ندارد" });
+      }
+
+      const log = await storage.updatePerformanceLog(req.params.id, updates);
+      res.json(log);
+    } catch (error: any) {
+      if (error.message === 'Authentication required') {
+        return res.status(401).json({ error: "احراز هویت لازم است" });
+      }
+      res.status(400).json({ error: "داده‌های وارد شده نامعتبر است" });
+    }
+  });
+
+  app.post("/api/performance-logs/:id/finalize", async (req, res) => {
+    try {
+      const { userId } = validateUserPermissions(req);
+      
+      // Verify ownership
+      const existingLog = await storage.getPerformanceLog(req.params.id);
+      if (!existingLog) {
+        return res.status(404).json({ error: "لاگ عملکرد یافت نشد" });
+      }
+      
+      if (existingLog.userId !== userId) {
+        return res.status(403).json({ error: "دسترسی غیرمجاز: این لاگ متعلق به شما نیست" });
+      }
+
+      const finalizedLog = await storage.finalizePerformanceLog(req.params.id);
+      
+      if (!finalizedLog) {
+        return res.status(500).json({ error: "خطا در نهایی کردن لاگ" });
+      }
+
+      res.json(finalizedLog);
+    } catch (error: any) {
+      if (error.message === 'Authentication required') {
+        return res.status(401).json({ error: "احراز هویت لازم است" });
+      }
+      res.status(500).json({ error: "خطا در نهایی کردن لاگ عملکرد" });
+    }
+  });
+
+  // Performance Entries for Logs
+  app.get("/api/performance-logs/:logId/entries", async (req, res) => {
+    try {
+      const { userId } = validateUserPermissions(req);
+      
+      // Verify log ownership
+      const log = await storage.getPerformanceLog(req.params.logId);
+      if (!log) {
+        return res.status(404).json({ error: "لاگ عملکرد یافت نشد" });
+      }
+      
+      if (log.userId !== userId) {
+        return res.status(403).json({ error: "دسترسی غیرمجاز: این لاگ متعلق به شما نیست" });
+      }
+
+      const entries = await storage.getPerformanceEntriesByLog(req.params.logId);
+      res.json(entries);
+    } catch (error: any) {
+      if (error.message === 'Authentication required') {
+        return res.status(401).json({ error: "احراز هویت لازم است" });
+      }
+      res.status(500).json({ error: "خطا در دریافت ورودی‌های عملکرد" });
+    }
+  });
+
+  app.post("/api/performance-logs/:logId/entries/batch", async (req, res) => {
+    try {
+      const { userId } = validateUserPermissions(req);
+      const { entries } = req.body;
+      
+      if (!Array.isArray(entries)) {
+        return res.status(400).json({ error: "ورودی‌ها باید آرایه باشند" });
+      }
+      
+      // Verify log ownership
+      const log = await storage.getPerformanceLog(req.params.logId);
+      if (!log) {
+        return res.status(404).json({ error: "لاگ عملکرد یافت نشد" });
+      }
+      
+      if (log.userId !== userId) {
+        return res.status(403).json({ error: "دسترسی غیرمجاز: این لاگ متعلق به شما نیست" });
+      }
+      
+      // Prevent modifications to finalized logs
+      if (log.status === 'finalized') {
+        return res.status(400).json({ error: "امکان ویرایش لاگ نهایی شده وجود ندارد" });
+      }
+
+      // Validate entries and add metadata
+      const validatedEntries = entries.map(entry => {
+        const validated = insertPerformanceEntrySchema.parse(entry);
+        validated.userId = userId;
+        validated.lastModifiedBy = userId;
+        return validated;
+      });
+
+      const createdEntries = await storage.batchCreateOrUpdatePerformanceEntries(req.params.logId, validatedEntries);
+      res.json(createdEntries);
+    } catch (error: any) {
+      if (error.message === 'Authentication required') {
+        return res.status(401).json({ error: "احراز هویت لازم است" });
+      }
+      res.status(400).json({ error: "داده‌های وارد شده نامعتبر است" });
+    }
+  });
+
+  // Iran Holidays routes
+  app.get("/api/holidays", async (req, res) => {
+    try {
+      validateUserPermissions(req); // Require authentication
+      const { year, month } = req.query;
+      
+      if (!year || !month) {
+        return res.status(400).json({ error: "سال و ماه الزامی است" });
+      }
+      
+      const holidays = await storage.getHolidaysByMonth(parseInt(year as string), parseInt(month as string));
+      res.json(holidays);
+    } catch (error: any) {
+      if (error.message === 'Authentication required') {
+        return res.status(401).json({ error: "احراز هویت لازم است" });
+      }
+      res.status(500).json({ error: "خطا در دریافت تعطیلات" });
+    }
+  });
+
+  app.post("/api/holidays", requireAdmin, async (req, res) => {
+    try {
+      const holidayData = insertIranHolidaySchema.parse(req.body);
+      const holiday = await storage.createHoliday(holidayData);
+      res.json(holiday);
+    } catch (error) {
+      res.status(400).json({ error: "داده‌های وارد شده نامعتبر است" });
+    }
+  });
+
+  app.delete("/api/holidays/:id", requireAdmin, async (req, res) => {
+    try {
+      const success = await storage.deleteHoliday(req.params.id);
+      
+      if (!success) {
+        return res.status(404).json({ error: "تعطیل یافت نشد" });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "خطا در حذف تعطیل" });
     }
   });
 

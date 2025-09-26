@@ -1,231 +1,376 @@
-import { useState } from "react";
-import { Card } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
+import { useState, useMemo } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { generateJalaliMonthDays, formatPersianNumber } from "@/lib/jalali-utils";
-import { Plus } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Plus, Calendar, Users, AlertCircle } from "lucide-react";
+import { 
+  generateJalaliMonthDays, 
+  JALALI_WEEKDAYS_SHORT, 
+  formatPersianNumber,
+  JALALI_MONTHS 
+} from "@/lib/jalali-utils";
+import { usePerformanceLogWorkflow } from "@/hooks/use-performance-logging";
+import type { 
+  PerformanceGridData, 
+  CalendarDay 
+} from "@/hooks/use-performance-logging";
+import type { Personnel, PerformanceEntry, IranHoliday } from "@shared/schema";
 
 interface PerformanceGridProps {
-  personnel: any[];
-  assignments: any[];
-  bases: any[];
-  workShifts: any[];
-  selectedPersonnel: string[];
-  month: number;
   year: number;
-  onPersonnelSelect: (personnelId: string, selected: boolean) => void;
-  onSelectAll: (selected: boolean) => void;
+  month: number;
+  personnel: Personnel[];
   onCellClick: (personnelId: string, date: string) => void;
+  onPersonnelClick: (personnelId: string) => void;
+  onAddPersonnel: () => void;
+  className?: string;
 }
 
 export function PerformanceGrid({
-  personnel,
-  assignments,
-  bases,
-  workShifts,
-  selectedPersonnel,
-  month,
   year,
-  onPersonnelSelect,
-  onSelectAll,
+  month,
+  personnel,
   onCellClick,
+  onPersonnelClick,
+  onAddPersonnel,
+  className
 }: PerformanceGridProps) {
-  const monthDays = generateJalaliMonthDays(year, month);
-  
-  // Calculate stats for each personnel
-  const getPersonnelStats = (personnelId: string) => {
-    const personAssignments = assignments.filter(a => a.personnelId === personnelId);
+  const {
+    performanceLog,
+    entries,
+    holidays,
+    isLoadingLog,
+    isLoadingEntries,
+    isLoadingHolidays,
+    logError,
+    entriesError
+  } = usePerformanceLogWorkflow(year, month);
+
+  // Generate calendar days for the selected month
+  const calendarDays = useMemo(() => {
+    const monthDays = generateJalaliMonthDays(year, month);
+    const holidayMap = new Map(holidays.map(h => [h.date, h]));
     
-    const totalHours = personAssignments.reduce((sum, assignment) => {
-      const shift = workShifts.find(s => s.id === assignment.shiftId);
-      return sum + (shift?.equivalentHours || 0);
-    }, 0);
+    return monthDays.map(day => ({
+      ...day,
+      isOfficialHoliday: holidayMap.has(day.date),
+      holidayTitle: holidayMap.get(day.date)?.title,
+      isWeekend: day.weekday === 'جمعه'
+    }));
+  }, [year, month, holidays]);
 
-    const urbanMissions = personAssignments.filter(assignment => {
-      const base = bases.find(b => b.id === assignment.baseId);
-      return base?.type === 'urban';
-    }).length;
+  // Process performance data into grid format
+  const gridData = useMemo((): PerformanceGridData[] => {
+    if (!personnel.length) return [];
 
-    const roadMissions = personAssignments.filter(assignment => {
-      const base = bases.find(b => b.id === assignment.baseId);
-      return base?.type === 'road';
-    }).length;
+    return personnel.map(person => {
+      const personEntries = entries.filter(entry => entry.personnelId === person.id);
+      const entriesMap = new Map(
+        personEntries.map(entry => [entry.date || '', entry])
+      );
 
-    const mealCount = personAssignments.length;
+      // Calculate totals
+      const totalMissions = personEntries
+        .filter(entry => entry.entryType === 'summary')
+        .reduce((sum, entry) => sum + (entry.missions || 0), 0);
+      
+      const totalMeals = personEntries
+        .filter(entry => entry.entryType === 'summary')
+        .reduce((sum, entry) => sum + (entry.meals || 0), 0);
 
-    return { totalHours, urbanMissions, roadMissions, mealCount };
-  };
+      return {
+        personnelId: person.id,
+        personnelName: `${person.firstName} ${person.lastName}`,
+        entries: entriesMap,
+        totalMissions,
+        totalMeals
+      };
+    });
+  }, [personnel, entries]);
 
-  // Get assignment for specific personnel and date
-  const getAssignment = (personnelId: string, date: string) => {
-    return assignments.find(a => a.personnelId === personnelId && a.date === date);
-  };
+  // Loading state
+  if (isLoadingLog || isLoadingEntries || isLoadingHolidays) {
+    return (
+      <Card className={className}>
+        <CardHeader>
+          <CardTitle className="text-right">در حال بارگذاری...</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
-  const handleSelectAll = (checked: boolean) => {
-    onSelectAll(checked);
-  };
+  // Error state
+  if (logError || entriesError) {
+    return (
+      <Card className={className}>
+        <CardHeader>
+          <CardTitle className="text-right flex items-center gap-2 text-destructive">
+            <AlertCircle className="h-5 w-5" />
+            خطا در بارگذاری اطلاعات
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-right text-muted-foreground">
+            {logError?.message || entriesError?.message}
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
-  const handlePersonnelSelect = (personnelId: string, checked: boolean) => {
-    onPersonnelSelect(personnelId, checked);
-  };
+  const isFinalized = performanceLog?.status === 'finalized';
 
   return (
-    <Card className="shadow-sm" id="performance-grid">
-      <div className="performance-grid overflow-x-auto max-h-[70vh]">
-        <table className="w-full text-sm">
-          <thead className="grid-header border-b border-border sticky top-0 bg-background z-20">
-            <tr className="bg-muted/50">
-              <th className="sticky-column px-4 py-3 text-right font-semibold border-l border-border w-8">
-                <Checkbox
-                  checked={personnel.length > 0 && selectedPersonnel.length === personnel.length}
-                  onCheckedChange={handleSelectAll}
-                  data-testid="checkbox-select-all"
-                />
-              </th>
-              <th className="sticky-column px-4 py-3 text-right font-semibold border-l border-border min-w-[200px] bg-background">
-                نام و نام خانوادگی
-              </th>
+    <Card className={className} data-testid="performance-grid">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <Button
+            onClick={onAddPersonnel}
+            variant="outline"
+            size="sm"
+            disabled={isFinalized}
+            data-testid="button-add-personnel"
+          >
+            <Plus className="ml-2 h-4 w-4" />
+            افزودن پرسنل
+          </Button>
+          
+          <CardTitle className="flex items-center gap-2 text-right">
+            <Calendar className="h-5 w-5" />
+            جدول کارکرد {JALALI_MONTHS[month - 1]} {formatPersianNumber(year)}
+          </CardTitle>
+        </div>
+        
+        {isFinalized && (
+          <Badge variant="secondary" className="w-fit mr-auto">
+            نهایی شده
+          </Badge>
+        )}
+      </CardHeader>
+
+      <CardContent className="overflow-x-auto">
+        {personnel.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <Users className="mx-auto h-12 w-12 mb-4 opacity-50" />
+            <p>هیچ پرسنلی تعریف نشده است</p>
+            <p className="text-sm">برای شروع، پرسنل مورد نظر را اضافه کنید</p>
+          </div>
+        ) : (
+          <div className="min-w-fit" data-testid="grid-table">
+            {/* Table Header */}
+            <div className="grid gap-1 mb-2 sticky top-0 bg-background z-10" 
+                 style={{ gridTemplateColumns: `200px repeat(${calendarDays.length}, 60px) 80px 80px` }}>
+              {/* Personnel column header */}
+              <div className="p-2 text-center font-medium border rounded bg-muted">
+                پرسنل
+              </div>
               
-              {/* Days of month */}
-              {monthDays.map((dayInfo) => (
-                <th
-                  key={dayInfo.day}
-                  className={cn(
-                    "grid-cell px-2 py-3 text-center font-semibold border-l border-border",
-                    dayInfo.isHoliday && "holiday-column"
-                  )}
+              {/* Day headers */}
+              {calendarDays.map((day) => (
+                <div
+                  key={day.date}
+                  className={`p-1 text-center text-xs font-medium border rounded ${
+                    day.isWeekend || day.isOfficialHoliday
+                      ? 'bg-yellow-100 dark:bg-yellow-900/20'
+                      : 'bg-muted'
+                  }`}
+                  title={day.isOfficialHoliday ? day.holidayTitle : undefined}
+                  data-testid={`day-header-${day.day}`}
                 >
-                  <div className="text-xs text-muted-foreground">
-                    {dayInfo.weekday}
-                  </div>
-                  <div>{formatPersianNumber(dayInfo.day)}</div>
-                  {dayInfo.isHoliday && (
-                    <div className="text-xs text-red-600">تعطیل</div>
-                  )}
-                </th>
+                  <div>{JALALI_WEEKDAYS_SHORT[day.weekday === 'شنبه' ? 0 : 
+                                                day.weekday === 'یکشنبه' ? 1 :
+                                                day.weekday === 'دوشنبه' ? 2 :
+                                                day.weekday === 'سه‌شنبه' ? 3 :
+                                                day.weekday === 'چهارشنبه' ? 4 :
+                                                day.weekday === 'پنج‌شنبه' ? 5 : 6]}</div>
+                  <div>{formatPersianNumber(day.day)}</div>
+                </div>
               ))}
               
-              {/* Summary columns */}
-              <th className="px-3 py-3 text-center font-semibold border-l border-border bg-primary/10 min-w-[100px]">
-                <div className="text-xs">کل ساعت</div>
-                <div>کاری</div>
-              </th>
-              <th className="px-3 py-3 text-center font-semibold border-l border-border bg-secondary/10 min-w-[100px]">
-                <div className="text-xs">ماموریت</div>
-                <div>شهری</div>
-              </th>
-              <th className="px-3 py-3 text-center font-semibold border-l border-border bg-accent/10 min-w-[100px]">
-                <div className="text-xs">ماموریت</div>
-                <div>جاده‌ای</div>
-              </th>
-              <th className="px-3 py-3 text-center font-semibold bg-muted/50 min-w-[100px]">
-                <div className="text-xs">تعداد</div>
-                <div>غذا</div>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {personnel.map((person) => {
-              const stats = getPersonnelStats(person.id);
-              const isSelected = selectedPersonnel.includes(person.id);
-              
-              return (
-                <tr
-                  key={person.id}
-                  className="border-b border-border hover:bg-muted/30 transition-colors"
-                  data-testid={`row-personnel-${person.id}`}
+              {/* Summary headers */}
+              <div className="p-2 text-center text-xs font-medium border rounded bg-muted">
+                کل ماموریت
+              </div>
+              <div className="p-2 text-center text-xs font-medium border rounded bg-muted">
+                کل وعده
+              </div>
+            </div>
+
+            {/* Table Rows */}
+            <div className="space-y-1">
+              {gridData.map((personData) => (
+                <div
+                  key={personData.personnelId}
+                  className="grid gap-1"
+                  style={{ gridTemplateColumns: `200px repeat(${calendarDays.length}, 60px) 80px 80px` }}
+                  data-testid={`personnel-row-${personData.personnelId}`}
                 >
-                  <td className="sticky-column px-4 py-2 border-l border-border bg-background">
-                    <Checkbox
-                      checked={isSelected}
-                      onCheckedChange={(checked) => 
-                        handlePersonnelSelect(person.id, checked as boolean)
-                      }
-                      data-testid={`checkbox-personnel-${person.id}`}
-                    />
-                  </td>
-                  <td className="sticky-column px-4 py-2 border-l border-border font-medium bg-background">
-                    <div data-testid={`text-personnel-name-${person.id}`}>
-                      {person.firstName} {person.lastName}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {person.nationalId}
-                    </div>
-                    <div className="flex gap-1 mt-1">
-                      <Badge
-                        variant={person.employmentStatus === 'official' ? 'default' : 'secondary'}
-                        className="text-xs"
-                      >
-                        {person.employmentStatus === 'official' ? 'رسمی' : 'طرحی'}
-                      </Badge>
-                      <Badge
-                        variant={person.productivityStatus === 'productive' ? 'default' : 'destructive'}
-                        className="text-xs"
-                      >
-                        {person.productivityStatus === 'productive' ? 'بهره‌ور' : 'غیر بهره‌ور'}
-                      </Badge>
-                    </div>
-                  </td>
-                  
+                  {/* Personnel name - clickable for bulk edit */}
+                  <Button
+                    variant="ghost"
+                    className="h-12 p-2 text-right justify-start font-normal border"
+                    onClick={() => onPersonnelClick(personData.personnelId)}
+                    disabled={isFinalized}
+                    data-testid={`personnel-name-${personData.personnelId}`}
+                  >
+                    <span className="truncate">{personData.personnelName}</span>
+                  </Button>
+
                   {/* Day cells */}
-                  {monthDays.map((dayInfo) => {
-                    const assignment = getAssignment(person.id, dayInfo.date);
-                    const shift = assignment ? workShifts.find(s => s.id === assignment.shiftId) : null;
-                    const base = assignment ? bases.find(b => b.id === assignment.baseId) : null;
+                  {calendarDays.map((day) => {
+                    const entry = personData.entries.get(day.date);
+                    const hasShift = entry && entry.shiftId;
                     
                     return (
-                      <td
-                        key={dayInfo.day}
-                        className={cn(
-                          "grid-cell p-1 border-l border-border cursor-pointer hover:bg-muted/50",
-                          dayInfo.isHoliday && "holiday-column"
-                        )}
-                        onClick={() => onCellClick(person.id, dayInfo.date)}
-                        data-testid={`cell-${person.id}-${dayInfo.day}`}
+                      <Button
+                        key={day.date}
+                        variant="outline"
+                        className={`h-12 p-1 text-xs border ${
+                          day.isWeekend || day.isOfficialHoliday
+                            ? 'bg-yellow-50 dark:bg-yellow-900/10'
+                            : hasShift 
+                            ? 'bg-green-50 dark:bg-green-900/20 border-green-300'
+                            : 'bg-white dark:bg-background'
+                        }`}
+                        onClick={() => onCellClick(personData.personnelId, day.date)}
+                        disabled={isFinalized}
+                        data-testid={`cell-${personData.personnelId}-${day.day}`}
                       >
-                        {assignment && shift && base ? (
-                          <div className={cn(
-                            "text-center rounded p-1",
-                            base.type === 'urban' ? 'bg-primary/10' : 'bg-secondary/10'
-                          )}>
-                            <div className="text-xs font-medium">{shift.title}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {base.name} - {base.type === 'urban' ? 'شهری' : 'جاده‌ای'}
+                        {hasShift && (
+                          <div className="text-center">
+                            <div className="text-green-700 dark:text-green-300 font-medium">
+                              شیفت
                             </div>
-                            <div className="text-xs font-mono">{shift.shiftCode}</div>
                           </div>
-                        ) : (
-                          !dayInfo.isHoliday && (
-                            <div className="text-center border border-dashed border-muted-foreground/30 rounded p-1 h-full flex items-center justify-center text-muted-foreground">
-                              <Plus className="h-3 w-3" />
-                            </div>
-                          )
                         )}
-                      </td>
+                      </Button>
                     );
                   })}
-                  
+
                   {/* Summary cells */}
-                  <td className="px-3 py-2 text-center font-bold border-l border-border bg-primary/10">
-                    {formatPersianNumber(stats.totalHours)}
-                  </td>
-                  <td className="px-3 py-2 text-center font-bold border-l border-border bg-secondary/10">
-                    {formatPersianNumber(stats.urbanMissions)}
-                  </td>
-                  <td className="px-3 py-2 text-center font-bold border-l border-border bg-accent/10">
-                    {formatPersianNumber(stats.roadMissions)}
-                  </td>
-                  <td className="px-3 py-2 text-center font-bold bg-muted/50">
-                    {formatPersianNumber(stats.mealCount)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                  <div className="h-12 p-2 text-center border rounded bg-muted flex items-center justify-center">
+                    <span className="font-medium" data-testid={`total-missions-${personData.personnelId}`}>
+                      {formatPersianNumber(personData.totalMissions)}
+                    </span>
+                  </div>
+                  <div className="h-12 p-2 text-center border rounded bg-muted flex items-center justify-center">
+                    <span className="font-medium" data-testid={`total-meals-${personData.personnelId}`}>
+                      {formatPersianNumber(personData.totalMeals)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Legend */}
+        <div className="mt-4 flex flex-wrap gap-4 justify-center text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-yellow-100 dark:bg-yellow-900/20 border rounded"></div>
+            <span>تعطیل</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-green-50 dark:bg-green-900/20 border border-green-300 rounded"></div>
+            <span>شیفت تعریف شده</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-white dark:bg-background border rounded"></div>
+            <span>بدون شیفت</span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Grid statistics summary component
+interface GridStatsProps {
+  gridData: PerformanceGridData[];
+  calendarDays: CalendarDay[];
+}
+
+export function GridStats({ gridData, calendarDays }: GridStatsProps) {
+  const stats = useMemo(() => {
+    const totalPersonnel = gridData.length;
+    const totalWorkingDays = calendarDays.filter(day => !day.isWeekend && !day.isOfficialHoliday).length;
+    const totalHolidays = calendarDays.filter(day => day.isWeekend || day.isOfficialHoliday).length;
+    
+    const totalAssignedShifts = gridData.reduce((sum, person) => {
+      return sum + Array.from(person.entries.values()).filter(entry => entry.shiftId).length;
+    }, 0);
+    
+    const totalMissions = gridData.reduce((sum, person) => sum + person.totalMissions, 0);
+    const totalMeals = gridData.reduce((sum, person) => sum + person.totalMeals, 0);
+
+    return {
+      totalPersonnel,
+      totalWorkingDays,
+      totalHolidays,
+      totalAssignedShifts,
+      totalMissions,
+      totalMeals
+    };
+  }, [gridData, calendarDays]);
+
+  return (
+    <Card data-testid="grid-stats">
+      <CardHeader>
+        <CardTitle className="text-right text-lg">خلاصه آمار</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
+          <div className="space-y-1">
+            <div className="text-2xl font-bold text-primary" data-testid="stat-personnel">
+              {formatPersianNumber(stats.totalPersonnel)}
+            </div>
+            <div className="text-sm text-muted-foreground">تعداد پرسنل</div>
+          </div>
+          
+          <div className="space-y-1">
+            <div className="text-2xl font-bold text-blue-600" data-testid="stat-working-days">
+              {formatPersianNumber(stats.totalWorkingDays)}
+            </div>
+            <div className="text-sm text-muted-foreground">روز کاری</div>
+          </div>
+          
+          <div className="space-y-1">
+            <div className="text-2xl font-bold text-yellow-600" data-testid="stat-holidays">
+              {formatPersianNumber(stats.totalHolidays)}
+            </div>
+            <div className="text-sm text-muted-foreground">روز تعطیل</div>
+          </div>
+          
+          <div className="space-y-1">
+            <div className="text-2xl font-bold text-green-600" data-testid="stat-shifts">
+              {formatPersianNumber(stats.totalAssignedShifts)}
+            </div>
+            <div className="text-sm text-muted-foreground">شیفت تعریف شده</div>
+          </div>
+          
+          <div className="space-y-1">
+            <div className="text-2xl font-bold text-purple-600" data-testid="stat-missions">
+              {formatPersianNumber(stats.totalMissions)}
+            </div>
+            <div className="text-sm text-muted-foreground">کل ماموریت</div>
+          </div>
+          
+          <div className="space-y-1">
+            <div className="text-2xl font-bold text-orange-600" data-testid="stat-meals">
+              {formatPersianNumber(stats.totalMeals)}
+            </div>
+            <div className="text-sm text-muted-foreground">کل وعده غذایی</div>
+          </div>
+        </div>
+      </CardContent>
     </Card>
   );
 }

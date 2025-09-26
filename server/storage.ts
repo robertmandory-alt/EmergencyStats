@@ -12,7 +12,11 @@ import {
   type BaseProfile,
   type InsertBaseProfile,
   type PerformanceEntry,
-  type InsertPerformanceEntry
+  type InsertPerformanceEntry,
+  type PerformanceLog,
+  type InsertPerformanceLog,
+  type IranHoliday,
+  type InsertIranHoliday
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
@@ -64,14 +68,28 @@ export interface IStorage {
   createBaseProfile(profile: InsertBaseProfile): Promise<BaseProfile>;
   updateBaseProfile(userId: string, updates: Partial<InsertBaseProfile>): Promise<BaseProfile | undefined>;
   
-  // Performance Entries
+  // Performance Logs
+  getPerformanceLog(id: string): Promise<PerformanceLog | undefined>;
+  getPerformanceLogByUserAndPeriod(userId: string, year: number, month: number): Promise<PerformanceLog | undefined>;
+  createPerformanceLog(log: InsertPerformanceLog): Promise<PerformanceLog>;
+  updatePerformanceLog(id: string, updates: Partial<InsertPerformanceLog>): Promise<PerformanceLog | undefined>;
+  finalizePerformanceLog(id: string): Promise<PerformanceLog | undefined>;
+  deletePerformanceLog(id: string): Promise<boolean>;
+  getPerformanceLogsByUser(userId: string): Promise<PerformanceLog[]>;
+  
+  // Performance Entries (Updated for new schema)
   getPerformanceEntry(id: string): Promise<PerformanceEntry | undefined>;
+  getPerformanceEntriesByLog(logId: string): Promise<PerformanceEntry[]>;
   getPerformanceEntriesByUser(userId: string, year?: number, month?: number): Promise<PerformanceEntry[]>;
-  getPerformanceEntriesByUserAndDate(userId: string, date: string): Promise<PerformanceEntry[]>;
   createPerformanceEntry(entry: InsertPerformanceEntry): Promise<PerformanceEntry>;
   updatePerformanceEntry(id: string, updates: Partial<InsertPerformanceEntry>): Promise<PerformanceEntry | undefined>;
   deletePerformanceEntry(id: string): Promise<boolean>;
-  finalizePerformanceEntries(userId: string, year: number, month: number): Promise<boolean>;
+  batchCreateOrUpdatePerformanceEntries(logId: string, entries: InsertPerformanceEntry[]): Promise<PerformanceEntry[]>;
+  
+  // Iran Holidays
+  getHolidaysByMonth(year: number, month: number): Promise<IranHoliday[]>;
+  createHoliday(holiday: InsertIranHoliday): Promise<IranHoliday>;
+  deleteHoliday(id: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -82,6 +100,8 @@ export class MemStorage implements IStorage {
   private performanceAssignments: Map<string, PerformanceAssignment>;
   private baseProfiles: Map<string, BaseProfile>;
   private performanceEntries: Map<string, PerformanceEntry>;
+  private performanceLogs: Map<string, PerformanceLog>;
+  private iranHolidays: Map<string, IranHoliday>;
 
   constructor() {
     this.users = new Map();
@@ -91,6 +111,8 @@ export class MemStorage implements IStorage {
     this.performanceAssignments = new Map();
     this.baseProfiles = new Map();
     this.performanceEntries = new Map();
+    this.performanceLogs = new Map();
+    this.iranHolidays = new Map();
     
     // Initialize default admin user
     this.initializeDefaultData();
@@ -279,7 +301,12 @@ export class MemStorage implements IStorage {
 
   async createPerformanceAssignment(insertAssignment: InsertPerformanceAssignment): Promise<PerformanceAssignment> {
     const id = randomUUID();
-    const assignment: PerformanceAssignment = { ...insertAssignment, id };
+    const assignment: PerformanceAssignment = { 
+      ...insertAssignment, 
+      id,
+      logId: insertAssignment.logId || null,
+      isDeleted: insertAssignment.isDeleted ?? false
+    };
     this.performanceAssignments.set(id, assignment);
     return assignment;
   }
@@ -391,13 +418,22 @@ export class MemStorage implements IStorage {
 
   async createPerformanceEntry(insertEntry: InsertPerformanceEntry): Promise<PerformanceEntry> {
     const id = randomUUID();
+    const now = new Date();
     const entry: PerformanceEntry = { 
       ...insertEntry, 
       id,
+      logId: insertEntry.logId || null,
+      date: insertEntry.date || null,
+      day: insertEntry.day || null,
+      shiftId: insertEntry.shiftId || null,
+      entryType: insertEntry.entryType ?? "cell",
       missions: insertEntry.missions ?? 0,
       meals: insertEntry.meals ?? 0,
+      lastModifiedBy: insertEntry.lastModifiedBy || null,
       isFinalized: insertEntry.isFinalized ?? false,
-      finalizedAt: null
+      finalizedAt: insertEntry.finalizedAt || null,
+      createdAt: now,
+      updatedAt: now
     };
     this.performanceEntries.set(id, entry);
     return entry;
@@ -429,23 +465,117 @@ export class MemStorage implements IStorage {
     return this.performanceEntries.delete(id);
   }
 
-  async finalizePerformanceEntries(userId: string, year: number, month: number): Promise<boolean> {
-    const entries = await this.getPerformanceEntriesByUser(userId, year, month);
-    const now = new Date().toISOString();
+  // Performance Logs methods
+  async getPerformanceLog(id: string): Promise<PerformanceLog | undefined> {
+    return this.performanceLogs.get(id);
+  }
+
+  async getPerformanceLogByUserAndPeriod(userId: string, year: number, month: number): Promise<PerformanceLog | undefined> {
+    return Array.from(this.performanceLogs.values()).find(
+      log => log.userId === userId && log.year === year && log.month === month
+    );
+  }
+
+  async createPerformanceLog(insertLog: InsertPerformanceLog): Promise<PerformanceLog> {
+    const id = randomUUID();
+    const now = new Date();
+    const log: PerformanceLog = {
+      ...insertLog,
+      id,
+      status: insertLog.status ?? "draft",
+      submittedAt: null,
+      createdAt: now,
+      updatedAt: now
+    };
+    this.performanceLogs.set(id, log);
+    return log;
+  }
+
+  async updatePerformanceLog(id: string, updates: Partial<InsertPerformanceLog>): Promise<PerformanceLog | undefined> {
+    const log = this.performanceLogs.get(id);
+    if (!log) return undefined;
     
-    // Idempotently finalize entries (skip already finalized ones)
-    entries.forEach(entry => {
-      if (!entry.isFinalized) {
-        const updatedEntry = { 
-          ...entry, 
-          isFinalized: true, 
-          finalizedAt: now 
-        };
-        this.performanceEntries.set(entry.id, updatedEntry);
+    const updatedLog = { 
+      ...log, 
+      ...updates, 
+      updatedAt: new Date() 
+    };
+    this.performanceLogs.set(id, updatedLog);
+    return updatedLog;
+  }
+
+  async finalizePerformanceLog(id: string): Promise<PerformanceLog | undefined> {
+    const log = this.performanceLogs.get(id);
+    if (!log) return undefined;
+    
+    const updatedLog = {
+      ...log,
+      status: "finalized" as const,
+      submittedAt: new Date(),
+      updatedAt: new Date()
+    };
+    this.performanceLogs.set(id, updatedLog);
+    return updatedLog;
+  }
+
+  async deletePerformanceLog(id: string): Promise<boolean> {
+    return this.performanceLogs.delete(id);
+  }
+
+  async getPerformanceLogsByUser(userId: string): Promise<PerformanceLog[]> {
+    return Array.from(this.performanceLogs.values()).filter(log => log.userId === userId);
+  }
+
+  // Updated Performance Entries methods
+  async getPerformanceEntriesByLog(logId: string): Promise<PerformanceEntry[]> {
+    return Array.from(this.performanceEntries.values()).filter(entry => entry.logId === logId);
+  }
+
+  async batchCreateOrUpdatePerformanceEntries(logId: string, entries: InsertPerformanceEntry[]): Promise<PerformanceEntry[]> {
+    const results: PerformanceEntry[] = [];
+    
+    for (const entryData of entries) {
+      // Check if entry already exists for this log, personnel, and date
+      const existing = Array.from(this.performanceEntries.values()).find(
+        entry => entry.logId === logId && 
+                entry.personnelId === entryData.personnelId && 
+                entry.date === entryData.date
+      );
+      
+      if (existing) {
+        // Update existing entry
+        const updated = await this.updatePerformanceEntry(existing.id, entryData);
+        if (updated) results.push(updated);
+      } else {
+        // Create new entry
+        const created = await this.createPerformanceEntry({ ...entryData, logId });
+        results.push(created);
       }
-    });
+    }
     
-    return entries.length > 0;
+    return results;
+  }
+
+  // Iran Holidays methods
+  async getHolidaysByMonth(year: number, month: number): Promise<IranHoliday[]> {
+    return Array.from(this.iranHolidays.values()).filter(
+      holiday => holiday.year === year && holiday.month === month
+    );
+  }
+
+  async createHoliday(insertHoliday: InsertIranHoliday): Promise<IranHoliday> {
+    const id = randomUUID();
+    const holiday: IranHoliday = { 
+      ...insertHoliday, 
+      id,
+      isOfficial: insertHoliday.isOfficial ?? true
+    };
+    this.iranHolidays.set(id, holiday);
+    return holiday;
+  }
+
+  async deleteHoliday(id: string): Promise<boolean> {
+    return this.iranHolidays.delete(id);
   }
 }
 

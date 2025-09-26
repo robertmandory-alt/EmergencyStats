@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, boolean, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, boolean, integer, timestamp, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -54,9 +54,25 @@ export const baseProfiles = pgTable("base_profiles", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+// Performance logs table (monthly log sessions)
+export const performanceLogs = pgTable("performance_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  baseId: varchar("base_id").notNull().references(() => bases.id),
+  year: integer("year").notNull(),
+  month: integer("month").notNull(),
+  status: text("status").notNull().default("draft"), // "draft" or "finalized"
+  submittedAt: timestamp("submitted_at"),
+  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  userMonthUnique: unique().on(table.userId, table.year, table.month),
+}));
+
 // Performance assignments table
 export const performanceAssignments = pgTable("performance_assignments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  logId: varchar("log_id").references(() => performanceLogs.id),
   personnelId: varchar("personnel_id").notNull().references(() => personnel.id),
   shiftId: varchar("shift_id").notNull().references(() => workShifts.id),
   baseId: varchar("base_id").notNull().references(() => bases.id),
@@ -64,23 +80,44 @@ export const performanceAssignments = pgTable("performance_assignments", {
   year: integer("year").notNull(),
   month: integer("month").notNull(),
   day: integer("day").notNull(),
-});
+  isDeleted: boolean("is_deleted").notNull().default(false),
+}, (table) => ({
+  logPersonnelDateUnique: unique().on(table.logId, table.personnelId, table.date),
+}));
 
 // Performance entries table (for missions and meals logging)
 export const performanceEntries = pgTable("performance_entries", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  logId: varchar("log_id").references(() => performanceLogs.id),
   userId: varchar("user_id").notNull().references(() => users.id),
   personnelId: varchar("personnel_id").notNull().references(() => personnel.id),
-  shiftId: varchar("shift_id").notNull().references(() => workShifts.id),
+  shiftId: varchar("shift_id").references(() => workShifts.id), // Optional for summary entries
+  date: text("date"), // Jalali date as string (YYYY-MM-DD) - optional for monthly summaries
+  year: integer("year").notNull(),
+  month: integer("month").notNull(),
+  day: integer("day"),
+  entryType: text("entry_type").default("cell"), // "cell", "batch", or "summary"
+  missions: integer("missions").notNull().default(0),
+  meals: integer("meals").notNull().default(0),
+  lastModifiedBy: varchar("last_modified_by").references(() => users.id),
+  isFinalized: boolean("is_finalized").notNull().default(false),
+  finalizedAt: text("finalized_at"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
+// Iranian holidays table
+export const iranHolidays = pgTable("iran_holidays", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   date: text("date").notNull(), // Jalali date as string (YYYY-MM-DD)
   year: integer("year").notNull(),
   month: integer("month").notNull(),
   day: integer("day").notNull(),
-  missions: integer("missions").notNull().default(0),
-  meals: integer("meals").notNull().default(0),
-  isFinalized: boolean("is_finalized").notNull().default(false),
-  finalizedAt: text("finalized_at"),
-});
+  title: text("title").notNull(), // Holiday name in Persian
+  isOfficial: boolean("is_official").notNull().default(true),
+}, (table) => ({
+  dateUnique: unique().on(table.date),
+}));
 
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
@@ -92,9 +129,21 @@ export const insertBaseProfileSchema = createInsertSchema(baseProfiles).omit({
   createdAt: true,
 });
 
+export const insertPerformanceLogSchema = createInsertSchema(performanceLogs).omit({
+  id: true,
+  submittedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertPerformanceEntrySchema = createInsertSchema(performanceEntries).omit({
   id: true,
-  finalizedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertIranHolidaySchema = createInsertSchema(iranHolidays).omit({
+  id: true,
 });
 
 export const insertPersonnelSchema = createInsertSchema(personnel).omit({
@@ -120,8 +169,14 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type BaseProfile = typeof baseProfiles.$inferSelect;
 export type InsertBaseProfile = z.infer<typeof insertBaseProfileSchema>;
 
+export type PerformanceLog = typeof performanceLogs.$inferSelect;
+export type InsertPerformanceLog = z.infer<typeof insertPerformanceLogSchema>;
+
 export type PerformanceEntry = typeof performanceEntries.$inferSelect;
 export type InsertPerformanceEntry = z.infer<typeof insertPerformanceEntrySchema>;
+
+export type IranHoliday = typeof iranHolidays.$inferSelect;
+export type InsertIranHoliday = z.infer<typeof insertIranHolidaySchema>;
 
 export type Personnel = typeof personnel.$inferSelect;
 export type InsertPersonnel = z.infer<typeof insertPersonnelSchema>;
