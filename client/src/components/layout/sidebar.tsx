@@ -49,19 +49,13 @@ const adminNavigation: NavigationItem[] = [
   // },
 ];
 
-// Regular user navigation (restricted to 2 modules)
+// Regular user navigation (single dashboard)
 const userNavigation: NavigationItem[] = [
   {
-    name: "مدیریت اطلاعات پرسنل",
-    href: "/personnel-info",
-    icon: UserCheck,
-    description: "ویرایش وضعیت بهره‌وری پرسنل"
-  },
-  {
-    name: "ثبت عملکرد",
-    href: "/performance-log",
-    icon: FileText,
-    description: "ثبت ماموریت‌ها و وعده‌های غذایی"
+    name: "پنل سرپرست پایگاه",
+    href: "/dashboard",
+    icon: LayoutDashboard,
+    description: "مدیریت پایگاه، اعضا و عملکرد"
   },
 ];
 
