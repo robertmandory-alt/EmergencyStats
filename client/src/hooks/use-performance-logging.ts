@@ -18,13 +18,13 @@ export function usePerformanceLogs() {
   });
 }
 
-export function usePerformanceLog(year: number, month: number) {
+export function usePerformanceLog(year: number, month: number, enabled: boolean = true) {
   // Use state to disable queries after first 404 to prevent endless polling
   const [has404Error, setHas404Error] = useState(false);
   
   return useQuery<PerformanceLog>({
     queryKey: ["/api/performance-logs", year.toString(), month.toString()],
-    enabled: !!(year && month) && !has404Error,
+    enabled: enabled && !!(year && month) && !has404Error,
     retry: (failureCount, error) => {
       // Don't retry on 404 errors - the log simply doesn't exist yet
       if (error && typeof error === 'object' && 'status' in error && error.status === 404) {
@@ -87,10 +87,10 @@ export function useFinalizePerformanceLog() {
 
 // Performance Entries Hooks
 
-export function usePerformanceLogEntries(logId: string) {
+export function usePerformanceLogEntries(logId: string, enabled: boolean = true) {
   return useQuery<PerformanceEntry[]>({
     queryKey: ["/api/performance-logs", logId, "entries"],
-    enabled: !!logId,
+    enabled: enabled && !!logId,
   });
 }
 
@@ -121,9 +121,9 @@ export function useBatchCreateOrUpdateEntries() {
 
 // Iran Holidays Hooks
 
-export function useHolidays(year: number, month: number) {
+export function useHolidays(year: number, month: number, enabled: boolean = true) {
   return useQuery<IranHoliday[]>({
-    queryKey: ["/api/holidays"],
+    queryKey: ["/api/holidays", year, month],
     queryFn: async () => {
       const response = await fetch(`/api/holidays?year=${year}&month=${month}`, {
         credentials: "include",
@@ -133,7 +133,7 @@ export function useHolidays(year: number, month: number) {
       }
       return response.json();
     },
-    enabled: !!(year && month),
+    enabled: enabled && !!(year && month),
   });
 }
 
@@ -167,10 +167,10 @@ export function useDeleteHoliday() {
 
 // Helper hooks for performance logging workflow
 
-export function usePerformanceLogWorkflow(year: number, month: number) {
-  const performanceLogQuery = usePerformanceLog(year, month);
-  const entriesQuery = usePerformanceLogEntries(performanceLogQuery.data?.id || "");
-  const holidaysQuery = useHolidays(year, month);
+export function usePerformanceLogWorkflow(year: number, month: number, enabled: boolean = true) {
+  const performanceLogQuery = usePerformanceLog(year, month, enabled);
+  const entriesQuery = usePerformanceLogEntries(performanceLogQuery.data?.id || "", enabled && !!performanceLogQuery.data?.id);
+  const holidaysQuery = useHolidays(year, month, enabled);
 
   const createLogMutation = useCreatePerformanceLog();
   const updateLogMutation = useUpdatePerformanceLog();
