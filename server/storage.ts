@@ -130,6 +130,17 @@ export class MemStorage implements IStorage {
     };
     this.users.set(adminUser.id, adminUser);
     
+    // Create the required "ems" user with password "1234"
+    const emsUser: User = {
+      id: randomUUID(),
+      username: "ems",
+      password: "1234", // In production, this should be hashed
+      role: "user",
+      isActive: true,
+      fullName: "سرپرست پایگاه اورژانس",
+    };
+    this.users.set(emsUser.id, emsUser);
+    
     // Create a sample regular user for testing
     const regularUser: User = {
       id: randomUUID(),
@@ -157,6 +168,62 @@ export class MemStorage implements IStorage {
       { id: randomUUID(), name: "پایگاه ۱۰۳", number: "103", type: "urban" },
     ];
     defaultBases.forEach(base => this.bases.set(base.id, base));
+
+    // Create 4 default personnel for system testing
+    const defaultPersonnel: Personnel[] = [
+      {
+        id: randomUUID(),
+        firstName: "علی",
+        lastName: "محمدی",
+        nationalId: "1234567890",
+        employmentStatus: "official",
+        productivityStatus: "productive", 
+        driverStatus: "driver"
+      },
+      {
+        id: randomUUID(),
+        firstName: "حسن",
+        lastName: "احمدی", 
+        nationalId: "1234567891",
+        employmentStatus: "contractual",
+        productivityStatus: "productive",
+        driverStatus: "non_driver"
+      },
+      {
+        id: randomUUID(),
+        firstName: "محمد",
+        lastName: "رضایی",
+        nationalId: "1234567892", 
+        employmentStatus: "official",
+        productivityStatus: "productive",
+        driverStatus: "driver"
+      },
+      {
+        id: randomUUID(),
+        firstName: "احمد",
+        lastName: "حسینی",
+        nationalId: "1234567893",
+        employmentStatus: "contractual", 
+        productivityStatus: "non_productive",
+        driverStatus: "non_driver"
+      }
+    ];
+    defaultPersonnel.forEach(person => this.personnel.set(person.id, person));
+
+    // Create base profile for ems user
+    const emsBaseProfile: BaseProfile = {
+      id: randomUUID(),
+      userId: emsUser.id,
+      supervisorName: "سرپرست پایگاه اورژانس",
+      supervisorNationalId: "0987654321", 
+      baseName: "پایگاه ۱۰۱",
+      baseNumber: "101",
+      baseType: "urban",
+      digitalSignature: null,
+      isComplete: true,
+      createdAt: new Date().toISOString()
+    };
+    this.baseProfiles.set(emsBaseProfile.id, emsBaseProfile);
   }
 
   // Users

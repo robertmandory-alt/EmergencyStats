@@ -329,8 +329,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Work shifts routes
-  app.get("/api/work-shifts", requireAdmin, async (req, res) => {
+  // Work shifts routes - Allow all authenticated users to read shifts
+  app.get("/api/work-shifts", requireAuth, async (req, res) => {
     try {
       const shifts = await storage.getAllWorkShifts();
       res.json(shifts);
@@ -790,10 +790,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const year = parseInt(req.params.year);
       const month = parseInt(req.params.month);
       
-      const performanceLog = await storage.getPerformanceLogByUserAndPeriod(userId, year, month);
+      let performanceLog = await storage.getPerformanceLogByUserAndPeriod(userId, year, month);
       
       if (!performanceLog) {
-        return res.status(404).json({ error: "لاگ عملکرد برای این دوره یافت نشد" });
+        // Auto-create performance log if it doesn't exist
+        try {
+          // Get user's base info for baseId
+          const baseProfile = await storage.getBaseProfile(userId);
+          if (!baseProfile || !baseProfile.isComplete) {
+            return res.status(403).json({ error: "پروفایل پایگاه تکمیل نشده است" });
+          }
+          
+          // Find the baseId based on profile
+          const bases = await storage.getAllBases();
+          const userBase = bases.find(base => 
+            base.name === baseProfile.baseName && 
+            base.number === baseProfile.baseNumber && 
+            base.type === baseProfile.baseType
+          );
+          
+          if (!userBase) {
+            return res.status(404).json({ error: "پایگاه مربوطه یافت نشد" });
+          }
+          
+          // Create new performance log
+          const newLogData = {
+            userId: userId,
+            baseId: userBase.id,
+            year: year,
+            month: month,
+            status: "draft" as const
+          };
+          
+          performanceLog = await storage.createPerformanceLog(newLogData);
+        } catch (createError) {
+          return res.status(500).json({ error: "خطا در ایجاد لاگ عملکرد جدید" });
+        }
       }
 
       res.json(performanceLog);

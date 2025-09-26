@@ -84,11 +84,11 @@ export function BulkAssignModal({
     }));
   }, [year, month, holidays]);
 
-  // Find existing entries for this personnel
+  // Find existing entries for this personnel (stabilized to prevent re-renders)
   const existingEntries = useMemo(() => {
     if (!personnel) return [];
     return entries.filter(entry => entry.personnelId === personnel.id);
-  }, [entries, personnel]);
+  }, [entries, personnel?.id]); // Only depend on personnel.id, not the whole personnel object
 
   // Initialize form with existing data
   useEffect(() => {
@@ -122,11 +122,12 @@ export function BulkAssignModal({
 
       setShiftAssignments(assignments);
       setMonthlyStats({ totalMissions: missions, totalMeals: meals });
-    } else {
+    } else if (!isOpen) {
+      // Only reset when modal closes, not when it's closed by default
       setShiftAssignments([]);
       setMonthlyStats({ totalMissions: 0, totalMeals: 0 });
     }
-  }, [isOpen, personnel, existingEntries, workShifts]);
+  }, [isOpen, personnel?.id, workShifts.length]); // Remove existingEntries from dependencies and stabilize other deps
 
   const addShiftAssignment = () => {
     const newAssignment: ShiftAssignment = {
