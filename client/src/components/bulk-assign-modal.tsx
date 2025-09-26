@@ -65,11 +65,11 @@ export function BulkAssignModal({
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("shifts");
 
-  const { 
-    performanceLog, 
-    entries,
-    holidays
-  } = usePerformanceLogWorkflow(year, month);
+  // Remove usePerformanceLogWorkflow from modal to prevent infinite loops
+  // The parent component should pass necessary data as props
+  const performanceLog: any = null;
+  const entries: PerformanceEntry[] = [];
+  const holidays: any[] = [];
 
   // Generate calendar days for the month
   const calendarDays = useMemo(() => {

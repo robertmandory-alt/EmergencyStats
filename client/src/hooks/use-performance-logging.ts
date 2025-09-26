@@ -21,6 +21,16 @@ export function usePerformanceLog(year: number, month: number) {
   return useQuery<PerformanceLog>({
     queryKey: ["/api/performance-logs", year.toString(), month.toString()],
     enabled: !!(year && month),
+    retry: (failureCount, error) => {
+      // Don't retry on 404 errors - the log simply doesn't exist yet
+      if (error && typeof error === 'object' && 'status' in error && error.status === 404) {
+        return false;
+      }
+      // Only retry up to 2 times for other errors
+      return failureCount < 2;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 }
 

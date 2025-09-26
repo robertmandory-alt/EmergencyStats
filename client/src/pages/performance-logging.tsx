@@ -66,6 +66,26 @@ export default function PerformanceLoggingPage() {
   const personnelQuery = usePersonnel();
   const workShiftsQuery = useWorkShifts();
   
+  // Only load data when grid is shown to prevent unnecessary API calls
+  const workflowData = showGrid 
+    ? usePerformanceLogWorkflow(selectedYear, selectedMonth)
+    : {
+        performanceLog: null,
+        entries: [],
+        holidays: [],
+        isLoadingLog: false,
+        isLoadingEntries: false,
+        isLoadingHolidays: false,
+        isCreatingLog: false,
+        isSavingEntries: false,
+        isFinalizingLog: false,
+        logError: null,
+        entriesError: null,
+        ensureLogExists: () => Promise.resolve(null),
+        saveDraftEntries: () => Promise.resolve(),
+        finalizeLog: () => Promise.resolve()
+      };
+  
   const {
     performanceLog,
     entries,
@@ -81,7 +101,7 @@ export default function PerformanceLoggingPage() {
     ensureLogExists,
     saveDraftEntries,
     finalizeLog
-  } = usePerformanceLogWorkflow(selectedYear, selectedMonth);
+  } = workflowData;
 
   // Period selection handler
   const handlePeriodConfirm = (year: number, month: number) => {
