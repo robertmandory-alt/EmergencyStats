@@ -1,9 +1,19 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { 
   Save, 
   Edit, 
@@ -11,7 +21,8 @@ import {
   CheckCircle, 
   Clock, 
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  UserPlus
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PeriodSelector, QuickPeriodSelector } from "@/components/period-selector";
@@ -20,18 +31,23 @@ import { CellEditorModal } from "@/components/cell-editor-modal";
 import { BulkAssignModal } from "@/components/bulk-assign-modal";
 import { getCurrentJalaliDate, JALALI_MONTHS, formatPersianNumber } from "@/lib/jalali-utils";
 import { usePerformanceLogWorkflow } from "@/hooks/use-performance-logging";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Personnel, WorkShift, InsertPerformanceEntry } from "@shared/schema";
 
 // Real data hooks using React Query - fetch base members instead of all personnel
-function usePersonnel() {
+function usePersonnel(enabled: boolean = true) {
   return useQuery({
     queryKey: ['/api/base-members'],
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    retry: 2
+    enabled: enabled,
+    staleTime: 1 * 60 * 1000, // 1 minute - reduced for more frequent updates
+    retry: 2,
+    refetchOnMount: true,
+    refetchOnWindowFocus: false
   }) as {
     data: Personnel[] | undefined;
     isLoading: boolean;
     error: any;
+    refetch: () => void;
   };
 }
 
@@ -59,11 +75,16 @@ export default function PerformanceLoggingPage() {
   // Modal state
   const [cellModalOpen, setCellModalOpen] = useState(false);
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [guestPersonnelModalOpen, setGuestPersonnelModalOpen] = useState(false);
   const [selectedPersonnel, setSelectedPersonnel] = useState<Personnel | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>("");
+  
+  // Guest personnel modal state
+  const [guestFirstName, setGuestFirstName] = useState("");
+  const [guestLastName, setGuestLastName] = useState("");
 
-  // Data hooks
-  const personnelQuery = usePersonnel();
+  // Data hooks - enable personnel loading when grid is shown
+  const personnelQuery = usePersonnel(showGrid);
   const workShiftsQuery = useWorkShifts();
   
   // Always call the hook but only enable data loading when grid is shown
@@ -89,11 +110,15 @@ export default function PerformanceLoggingPage() {
     setSelectedYear(year);
     setSelectedMonth(month);
     setShowGrid(true);
+    // Refetch personnel data when grid is shown to ensure fresh data
+    if (personnelQuery.refetch) {
+      personnelQuery.refetch();
+    }
   };
 
   // Cell click handler (individual editing)
   const handleCellClick = (personnelId: string, date: string) => {
-    const personnel = personnelQuery.data?.find(p => p.id === personnelId);
+    const personnel = allPersonnel.find(p => p.id === personnelId);
     if (personnel) {
       setSelectedPersonnel(personnel);
       setSelectedDate(date);
@@ -103,7 +128,7 @@ export default function PerformanceLoggingPage() {
 
   // Personnel click handler (bulk editing)
   const handlePersonnelClick = (personnelId: string) => {
-    const personnel = personnelQuery.data?.find(p => p.id === personnelId);
+    const personnel = allPersonnel.find(p => p.id === personnelId);
     if (personnel) {
       setSelectedPersonnel(personnel);
       setBulkModalOpen(true);
@@ -112,11 +137,55 @@ export default function PerformanceLoggingPage() {
 
   // Add personnel handler
   const handleAddPersonnel = () => {
-    toast({
-      title: "افزودن پرسنل",
-      description: "این قابلیت در نسخه آینده اضافه خواهد شد"
-    });
+    setGuestPersonnelModalOpen(true);
   };
+  
+  // Guest personnel mutation
+  const addGuestPersonnelMutation = useMutation({
+    mutationFn: async (guestData: { firstName: string; lastName: string }) => {
+      const response = await apiRequest("POST", "/api/guest-personnel", guestData);
+      return await response.json();
+    },
+    onSuccess: (newPersonnel: Personnel) => {
+      // Invalidate the base members cache to refetch the updated list
+      queryClient.invalidateQueries({ queryKey: ["/api/base-members"] });
+      
+      setGuestFirstName("");
+      setGuestLastName("");
+      setGuestPersonnelModalOpen(false);
+      
+      toast({
+        title: "پرسنل مهمان اضافه شد",
+        description: `${newPersonnel.firstName} ${newPersonnel.lastName} به لیست پرسنل اضافه شد`
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "خطا",
+        description: error.message || "خطا در افزودن پرسنل مهمان",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Handle adding guest personnel
+  const handleAddGuestPersonnel = async () => {
+    if (guestFirstName.trim() && guestLastName.trim()) {
+      addGuestPersonnelMutation.mutate({
+        firstName: guestFirstName.trim(),
+        lastName: guestLastName.trim()
+      });
+    } else {
+      toast({
+        title: "خطا",
+        description: "نام و نام خانوادگی پرسنل الزامی است",
+        variant: "destructive"
+      });
+    }
+  };
+  
+  // Use personnel query data directly since guest personnel are now part of base members
+  const allPersonnel = personnelQuery.data || [];
 
   // Save individual cell entry
   const handleSaveCellEntry = async (personnelId: string, date: string, shiftId: string | null) => {
@@ -319,7 +388,7 @@ export default function PerformanceLoggingPage() {
               <PerformanceGrid
                 year={selectedYear}
                 month={selectedMonth}
-                personnel={personnelQuery.data || []}
+                personnel={allPersonnel}
                 performanceLog={performanceLog || null}
                 entries={entries}
                 holidays={holidays}
@@ -412,6 +481,73 @@ export default function PerformanceLoggingPage() {
         workShifts={workShiftsQuery.data || []}
         onSave={handleSaveBulkEntries}
       />
+
+      {/* Guest Personnel Modal */}
+      <Dialog open={guestPersonnelModalOpen} onOpenChange={setGuestPersonnelModalOpen}>
+        <DialogContent className="sm:max-w-[425px]" data-testid="guest-personnel-modal">
+          <DialogHeader>
+            <DialogTitle className="text-right">افزودن پرسنل مهمان</DialogTitle>
+            <DialogDescription className="text-right">
+              پرسنل مهمان برای این دوره کارکرد اضافه کنید
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="firstName" className="text-right">
+                نام
+              </Label>
+              <Input
+                id="firstName"
+                value={guestFirstName}
+                onChange={(e) => setGuestFirstName(e.target.value)}
+                className="col-span-3 text-right"
+                placeholder="نام پرسنل"
+                data-testid="input-guest-first-name"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="lastName" className="text-right">
+                نام خانوادگی
+              </Label>
+              <Input
+                id="lastName"
+                value={guestLastName}
+                onChange={(e) => setGuestLastName(e.target.value)}
+                className="col-span-3 text-right"
+                placeholder="نام خانوادگی پرسنل"
+                data-testid="input-guest-last-name"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setGuestPersonnelModalOpen(false);
+                setGuestFirstName("");
+                setGuestLastName("");
+              }}
+              data-testid="button-cancel-guest"
+            >
+              انصراف
+            </Button>
+            <Button
+              type="submit"
+              onClick={handleAddGuestPersonnel}
+              disabled={addGuestPersonnelMutation.isPending}
+              data-testid="button-add-guest"
+            >
+              {addGuestPersonnelMutation.isPending ? (
+                <RefreshCw className="ml-2 h-4 w-4 animate-spin" />
+              ) : (
+                <UserPlus className="ml-2 h-4 w-4" />
+              )}
+              {addGuestPersonnelMutation.isPending ? "در حال افزودن..." : "افزودن پرسنل"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

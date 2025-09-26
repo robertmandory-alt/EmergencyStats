@@ -173,6 +173,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Guest personnel endpoint - allows regular users to add temporary personnel
+  app.post("/api/guest-personnel", async (req, res) => {
+    try {
+      // Require authentication and use session user ID
+      const { userId } = validateUserPermissions(req);
+      
+      const { firstName, lastName } = req.body;
+      if (!firstName || !lastName) {
+        return res.status(400).json({ error: "نام و نام خانوادگی الزامی است" });
+      }
+
+      // Create guest personnel with temporary employment status and unique placeholder national ID
+      const guestPersonnelData = {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        nationalId: `temp-${Date.now()}-${userId}`, // Unique temporary ID
+        employmentStatus: "temporary",
+        productivityStatus: "productive",
+        driverStatus: "non_driver"
+      };
+
+      // Validate using the proper schema
+      const validatedData = insertPersonnelSchema.parse(guestPersonnelData);
+      
+      // Create the personnel record
+      const person = await storage.createPersonnel(validatedData);
+      
+      // Link the guest personnel to the user's base
+      await storage.addBaseMember(userId, person.id);
+      
+      res.json(person);
+    } catch (error: any) {
+      if (error.message === 'Authentication required') {
+        return res.status(401).json({ error: "احراز هویت لازم است" });
+      }
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ error: "داده‌های وارد شده نامعتبر است" });
+      }
+      res.status(400).json({ error: "خطا در افزودن پرسنل مهمان" });
+    }
+  });
+
   app.put("/api/personnel/:id", async (req, res) => {
     try {
       // Validate authentication and get user info

@@ -19,7 +19,7 @@ export const personnel = pgTable("personnel", {
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   nationalId: text("national_id").notNull().unique(),
-  employmentStatus: text("employment_status").notNull(), // "official" or "contractual"
+  employmentStatus: text("employment_status").notNull(), // "official", "contractual", or "temporary"
   productivityStatus: text("productivity_status").notNull(), // "productive" or "non_productive"
   driverStatus: text("driver_status").notNull(), // "driver" or "non_driver"
 });
