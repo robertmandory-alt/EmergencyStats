@@ -69,6 +69,7 @@ export default function LoginPage() {
               <Input
                 id="username"
                 data-testid="input-username"
+                autoComplete="username"
                 {...register("username", {
                   required: "نام کاربری الزامی است",
                 })}
@@ -87,6 +88,7 @@ export default function LoginPage() {
                 id="password"
                 type="password"
                 data-testid="input-password"
+                autoComplete="current-password"
                 {...register("password", {
                   required: "رمز عبور الزامی است",
                 })}
