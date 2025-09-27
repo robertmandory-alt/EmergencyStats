@@ -308,14 +308,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Helper function to validate user authentication from session
   function validateUserPermissions(req: any) {
     // Check if user is authenticated via session
-    if (!req.user || !req.session?.user) {
+    if (!req.session?.user) {
       throw new Error('Authentication required');
     }
     
     return {
-      userId: req.user.id,
-      userRole: req.user.role,
-      username: req.user.username
+      userId: req.session.user.id,
+      userRole: req.session.user.role,
+      username: req.session.user.username
     };
   }
 
