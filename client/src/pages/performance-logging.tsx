@@ -14,6 +14,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { 
   Save, 
   Edit, 
@@ -51,6 +58,22 @@ function usePersonnel(enabled: boolean = true) {
   };
 }
 
+// Hook to fetch all personnel for selection in dropdowns
+function useAllPersonnel(enabled: boolean = true) {
+  return useQuery({
+    queryKey: ['/api/all-personnel'],
+    enabled: enabled,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    retry: 2,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false
+  }) as {
+    data: Personnel[] | undefined;
+    isLoading: boolean;
+    error: any;
+  };
+}
+
 function useWorkShifts() {
   return useQuery({
     queryKey: ['/api/work-shifts'],
@@ -80,11 +103,11 @@ export default function PerformanceLoggingPage() {
   const [selectedDate, setSelectedDate] = useState<string>("");
   
   // Guest personnel modal state
-  const [guestFirstName, setGuestFirstName] = useState("");
-  const [guestLastName, setGuestLastName] = useState("");
+  const [selectedGuestPersonnelId, setSelectedGuestPersonnelId] = useState<string>("");
 
   // Data hooks - enable personnel loading when grid is shown
   const personnelQuery = usePersonnel(showGrid);
+  const allPersonnelQuery = useAllPersonnel(guestPersonnelModalOpen); // Load all personnel when modal opens
   const workShiftsQuery = useWorkShifts();
   
   // Always call the hook but only enable data loading when grid is shown
@@ -140,45 +163,45 @@ export default function PerformanceLoggingPage() {
     setGuestPersonnelModalOpen(true);
   };
   
-  // Guest personnel mutation
-  const addGuestPersonnelMutation = useMutation({
-    mutationFn: async (guestData: { firstName: string; lastName: string }) => {
-      const response = await apiRequest("POST", "/api/guest-personnel", guestData);
+  // Add existing personnel to base mutation
+  const addPersonnelToBaseMutation = useMutation({
+    mutationFn: async (personnelId: string) => {
+      const response = await apiRequest("POST", "/api/base-members", { personnelId });
       return await response.json();
     },
-    onSuccess: (newPersonnel: Personnel) => {
+    onSuccess: (result: any) => {
       // Invalidate the base members cache to refetch the updated list
       queryClient.invalidateQueries({ queryKey: ["/api/base-members"] });
       
-      setGuestFirstName("");
-      setGuestLastName("");
+      // Find the personnel details for the toast
+      const addedPersonnel = allPersonnelQuery.data?.find(p => p.id === selectedGuestPersonnelId);
+      const personnelName = addedPersonnel ? `${addedPersonnel.firstName} ${addedPersonnel.lastName}` : "پرسنل";
+      
+      setSelectedGuestPersonnelId("");
       setGuestPersonnelModalOpen(false);
       
       toast({
-        title: "پرسنل مهمان اضافه شد",
-        description: `${newPersonnel.firstName} ${newPersonnel.lastName} به لیست پرسنل اضافه شد`
+        title: "پرسنل به پایگاه اضافه شد",
+        description: `${personnelName} به لیست پرسنل پایگاه اضافه شد`
       });
     },
     onError: (error: any) => {
       toast({
         title: "خطا",
-        description: error.message || "خطا در افزودن پرسنل مهمان",
+        description: error.message || "خطا در افزودن پرسنل به پایگاه",
         variant: "destructive"
       });
     }
   });
 
-  // Handle adding guest personnel
-  const handleAddGuestPersonnel = async () => {
-    if (guestFirstName.trim() && guestLastName.trim()) {
-      addGuestPersonnelMutation.mutate({
-        firstName: guestFirstName.trim(),
-        lastName: guestLastName.trim()
-      });
+  // Handle adding personnel to base
+  const handleAddPersonnelToBase = async () => {
+    if (selectedGuestPersonnelId) {
+      addPersonnelToBaseMutation.mutate(selectedGuestPersonnelId);
     } else {
       toast({
         title: "خطا",
-        description: "نام و نام خانوادگی پرسنل الزامی است",
+        description: "لطفاً پرسنل مورد نظر را انتخاب کنید",
         variant: "destructive"
       });
     }
@@ -486,37 +509,42 @@ export default function PerformanceLoggingPage() {
       <Dialog open={guestPersonnelModalOpen} onOpenChange={setGuestPersonnelModalOpen}>
         <DialogContent className="sm:max-w-[425px]" data-testid="guest-personnel-modal">
           <DialogHeader>
-            <DialogTitle className="text-right">افزودن پرسنل مهمان</DialogTitle>
+            <DialogTitle className="text-right">افزودن پرسنل به پایگاه</DialogTitle>
             <DialogDescription className="text-right">
-              پرسنل مهمان برای این دوره کارکرد اضافه کنید
+              پرسنل موجود در سیستم را به پایگاه خود اضافه کنید
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="firstName" className="text-right">
-                نام
+              <Label className="text-right">
+                انتخاب پرسنل
               </Label>
-              <Input
-                id="firstName"
-                value={guestFirstName}
-                onChange={(e) => setGuestFirstName(e.target.value)}
-                className="col-span-3 text-right"
-                placeholder="نام پرسنل"
-                data-testid="input-guest-first-name"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="lastName" className="text-right">
-                نام خانوادگی
-              </Label>
-              <Input
-                id="lastName"
-                value={guestLastName}
-                onChange={(e) => setGuestLastName(e.target.value)}
-                className="col-span-3 text-right"
-                placeholder="نام خانوادگی پرسنل"
-                data-testid="input-guest-last-name"
-              />
+              <div className="col-span-3">
+                <Select
+                  value={selectedGuestPersonnelId}
+                  onValueChange={setSelectedGuestPersonnelId}
+                  disabled={allPersonnelQuery.isLoading}
+                >
+                  <SelectTrigger data-testid="select-guest-personnel">
+                    <SelectValue placeholder="پرسنل مورد نظر را انتخاب کنید" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allPersonnelQuery.isLoading ? (
+                      <SelectItem value="" disabled>در حال بارگذاری...</SelectItem>
+                    ) : allPersonnelQuery.data?.length ? (
+                      allPersonnelQuery.data
+                        .filter(person => !personnelQuery.data?.some(basePerson => basePerson.id === person.id))
+                        .map((person) => (
+                          <SelectItem key={person.id} value={person.id}>
+                            {person.firstName} {person.lastName} ({person.nationalId})
+                          </SelectItem>
+                        ))
+                    ) : (
+                      <SelectItem value="" disabled>هیچ پرسنلی برای انتخاب موجود نیست</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -525,8 +553,7 @@ export default function PerformanceLoggingPage() {
               variant="outline"
               onClick={() => {
                 setGuestPersonnelModalOpen(false);
-                setGuestFirstName("");
-                setGuestLastName("");
+                setSelectedGuestPersonnelId("");
               }}
               data-testid="button-cancel-guest"
             >
@@ -534,16 +561,16 @@ export default function PerformanceLoggingPage() {
             </Button>
             <Button
               type="submit"
-              onClick={handleAddGuestPersonnel}
-              disabled={addGuestPersonnelMutation.isPending}
+              onClick={handleAddPersonnelToBase}
+              disabled={addPersonnelToBaseMutation.isPending}
               data-testid="button-add-guest"
             >
-              {addGuestPersonnelMutation.isPending ? (
+              {addPersonnelToBaseMutation.isPending ? (
                 <RefreshCw className="ml-2 h-4 w-4 animate-spin" />
               ) : (
                 <UserPlus className="ml-2 h-4 w-4" />
               )}
-              {addGuestPersonnelMutation.isPending ? "در حال افزودن..." : "افزودن پرسنل"}
+              {addPersonnelToBaseMutation.isPending ? "در حال افزودن..." : "افزودن به پایگاه"}
             </Button>
           </DialogFooter>
         </DialogContent>

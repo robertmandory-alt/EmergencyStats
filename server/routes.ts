@@ -124,19 +124,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const personnel = await storage.getAllPersonnel();
         res.json(personnel);
       } else {
-        // Regular users can only see personnel from their base
+        // Regular users can only see personnel from their base members
         const baseProfile = await storage.getBaseProfile(userId);
         if (!baseProfile || !baseProfile.isComplete) {
           return res.status(403).json({ error: "پروفایل پایگاه تکمیل نشده است" });
         }
         
-        // Get personnel assigned to this user's base
-        const personnel = await storage.getPersonnelByBase(
-          baseProfile.baseName,
-          baseProfile.baseNumber,
-          baseProfile.baseType
-        );
-        res.json(personnel);
+        // Get personnel from base members (junction table)
+        const baseMembers = await storage.getBaseMembersByUser(userId);
+        res.json(baseMembers);
       }
     } catch (error: any) {
       if (error.message === 'Authentication required') {
@@ -438,7 +434,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bases routes
-  app.get("/api/bases", requireAdmin, async (req, res) => {
+  app.get("/api/bases", requireAuth, async (req, res) => {
     try {
       const bases = await storage.getAllBases();
       res.json(bases);
