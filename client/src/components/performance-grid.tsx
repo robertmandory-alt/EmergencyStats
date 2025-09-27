@@ -60,10 +60,13 @@ export function PerformanceGrid({
   // Process performance data into grid format
   const gridData = useMemo((): PerformanceGridData[] => {
     if (!personnel || !personnel.length) return [];
-    if (!entries || !Array.isArray(entries)) return [];
+    
+    // Handle case where entries is not an array (should be an array of PerformanceEntry)
+    // If entries is not an array or is empty, still show personnel with empty entries
+    const entriesArray = Array.isArray(entries) ? entries : [];
 
     return personnel.map(person => {
-      const personEntries = Array.isArray(entries) ? entries.filter(entry => entry.personnelId === person.id) : [];
+      const personEntries = entriesArray.filter(entry => entry.personnelId === person.id);
       const entriesMap = new Map(
         personEntries.map(entry => [entry.date || '', entry])
       );
