@@ -118,8 +118,8 @@ export async function seedDatabase() {
     console.log("✅ پرسنل پیش‌فرض ایجاد شد");
 
     // Create base profile for ems user (if it doesn't exist)
-    if (emsUser || emsUser?.id) {
-      const userId = emsUser?.id || (await db.select().from(users).where(eq(users.username, "ems")))[0]?.id;
+    if (emsUser?.id) {
+      const userId = emsUser.id;
       
       if (userId) {
         await db.insert(baseProfiles).values({
