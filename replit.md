@@ -2,6 +2,16 @@
 
 This is an Emergency Services Personnel Management System designed for Iranian emergency medical services. The application manages personnel scheduling, shift assignments, and performance tracking with support for Jalali (Persian) calendar system. It features a React frontend with a modern UI built using shadcn/ui components and an Express.js backend with PostgreSQL database integration through Drizzle ORM.
 
+# Recent Changes
+
+## Performance Logging Fixes (September 27, 2025)
+- **Fixed Authentication Issues**: Resolved 500 errors when non-admin users accessed performance logging by changing `/api/bases` from admin-only to authenticated access
+- **Base Access Permissions**: Updated base API endpoints to allow regular users to view bases in dropdowns while maintaining admin restrictions for modifications
+- **Personnel Data Loading**: Fixed personnel endpoint for regular users to properly load base members instead of attempting unauthorized base filtering
+- **Guest Personnel Conversion**: Converted guest personnel addition from text inputs to dropdown selection from existing database personnel
+- **Base Members Count**: Fixed supervisor home page showing zero base members by updating the personnel endpoint to use proper base member relationships
+- **UI/UX Improvements**: Enhanced dropdown functionality with loading states, filtering, and proper error handling
+
 # User Preferences
 
 Preferred communication style: Simple, everyday language.
