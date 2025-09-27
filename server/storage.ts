@@ -21,6 +21,20 @@ import {
   type InsertBaseMember
 } from "@shared/schema";
 import { randomUUID } from "crypto";
+import { db } from "./db";
+import { 
+  users, 
+  personnel, 
+  workShifts, 
+  bases, 
+  performanceAssignments, 
+  baseProfiles, 
+  performanceEntries, 
+  performanceLogs, 
+  iranHolidays, 
+  baseMembers 
+} from "@shared/schema";
+import { eq, and, or, inArray, desc } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -713,4 +727,380 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+export class DatabaseStorage implements IStorage {
+  // Users
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user || undefined;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
+  async updateUser(id: string, updates: Partial<InsertUser>): Promise<User | undefined> {
+    const [user] = await db.update(users).set(updates).where(eq(users.id, id)).returning();
+    return user || undefined;
+  }
+
+  async deleteUser(id: string): Promise<boolean> {
+    const result = await db.delete(users).where(eq(users.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users);
+  }
+
+  // Personnel
+  async getPersonnel(id: string): Promise<Personnel | undefined> {
+    const [person] = await db.select().from(personnel).where(eq(personnel.id, id));
+    return person || undefined;
+  }
+
+  async getAllPersonnel(): Promise<Personnel[]> {
+    return await db.select().from(personnel);
+  }
+
+  async createPersonnel(insertPersonnel: InsertPersonnel): Promise<Personnel> {
+    const [person] = await db.insert(personnel).values(insertPersonnel).returning();
+    return person;
+  }
+
+  async updatePersonnel(id: string, updates: Partial<InsertPersonnel>): Promise<Personnel | undefined> {
+    const [person] = await db.update(personnel).set(updates).where(eq(personnel.id, id)).returning();
+    return person || undefined;
+  }
+
+  async deletePersonnel(id: string): Promise<boolean> {
+    const result = await db.delete(personnel).where(eq(personnel.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async getPersonnelByNationalId(nationalId: string): Promise<Personnel | undefined> {
+    const [person] = await db.select().from(personnel).where(eq(personnel.nationalId, nationalId));
+    return person || undefined;
+  }
+
+  async getPersonnelByBase(baseName: string, baseNumber: string, baseType: string): Promise<Personnel[]> {
+    // Get base first
+    const [base] = await db.select().from(bases).where(and(
+      eq(bases.name, baseName),
+      eq(bases.number, baseNumber),
+      eq(bases.type, baseType)
+    ));
+    
+    if (!base) return [];
+
+    // Get personnel via performance assignments for this base
+    const assignments = await db.select().from(performanceAssignments).where(eq(performanceAssignments.baseId, base.id));
+    const personnelIds = Array.from(new Set(assignments.map(a => a.personnelId)));
+    
+    if (personnelIds.length === 0) return [];
+    
+    return await db.select().from(personnel).where(inArray(personnel.id, personnelIds));
+  }
+
+  // Work Shifts
+  async getWorkShift(id: string): Promise<WorkShift | undefined> {
+    const [shift] = await db.select().from(workShifts).where(eq(workShifts.id, id));
+    return shift || undefined;
+  }
+
+  async getAllWorkShifts(): Promise<WorkShift[]> {
+    return await db.select().from(workShifts);
+  }
+
+  async createWorkShift(insertShift: InsertWorkShift): Promise<WorkShift> {
+    const [shift] = await db.insert(workShifts).values(insertShift).returning();
+    return shift;
+  }
+
+  async updateWorkShift(id: string, updates: Partial<InsertWorkShift>): Promise<WorkShift | undefined> {
+    const [shift] = await db.update(workShifts).set(updates).where(eq(workShifts.id, id)).returning();
+    return shift || undefined;
+  }
+
+  async deleteWorkShift(id: string): Promise<boolean> {
+    const result = await db.delete(workShifts).where(eq(workShifts.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async getWorkShiftByCode(code: string): Promise<WorkShift | undefined> {
+    const [shift] = await db.select().from(workShifts).where(eq(workShifts.shiftCode, code));
+    return shift || undefined;
+  }
+
+  // Bases
+  async getBase(id: string): Promise<Base | undefined> {
+    const [base] = await db.select().from(bases).where(eq(bases.id, id));
+    return base || undefined;
+  }
+
+  async getAllBases(): Promise<Base[]> {
+    return await db.select().from(bases);
+  }
+
+  async createBase(insertBase: InsertBase): Promise<Base> {
+    const [base] = await db.insert(bases).values(insertBase).returning();
+    return base;
+  }
+
+  async updateBase(id: string, updates: Partial<InsertBase>): Promise<Base | undefined> {
+    const [base] = await db.update(bases).set(updates).where(eq(bases.id, id)).returning();
+    return base || undefined;
+  }
+
+  async deleteBase(id: string): Promise<boolean> {
+    const result = await db.delete(bases).where(eq(bases.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Performance Assignments
+  async getPerformanceAssignment(id: string): Promise<PerformanceAssignment | undefined> {
+    const [assignment] = await db.select().from(performanceAssignments).where(eq(performanceAssignments.id, id));
+    return assignment || undefined;
+  }
+
+  async getAllPerformanceAssignments(): Promise<PerformanceAssignment[]> {
+    return await db.select().from(performanceAssignments);
+  }
+
+  async createPerformanceAssignment(insertAssignment: InsertPerformanceAssignment): Promise<PerformanceAssignment> {
+    const [assignment] = await db.insert(performanceAssignments).values({
+      ...insertAssignment,
+      isDeleted: insertAssignment.isDeleted ?? false
+    }).returning();
+    return assignment;
+  }
+
+  async updatePerformanceAssignment(id: string, updates: Partial<InsertPerformanceAssignment>): Promise<PerformanceAssignment | undefined> {
+    const [assignment] = await db.update(performanceAssignments).set(updates).where(eq(performanceAssignments.id, id)).returning();
+    return assignment || undefined;
+  }
+
+  async deletePerformanceAssignment(id: string): Promise<boolean> {
+    const result = await db.delete(performanceAssignments).where(eq(performanceAssignments.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async getPerformanceAssignmentsByMonth(year: number, month: number): Promise<PerformanceAssignment[]> {
+    return await db.select().from(performanceAssignments).where(and(
+      eq(performanceAssignments.year, year),
+      eq(performanceAssignments.month, month)
+    ));
+  }
+
+  async getPerformanceAssignmentsByPersonnelAndDate(personnelId: string, date: string): Promise<PerformanceAssignment | undefined> {
+    const [assignment] = await db.select().from(performanceAssignments).where(and(
+      eq(performanceAssignments.personnelId, personnelId),
+      eq(performanceAssignments.date, date)
+    ));
+    return assignment || undefined;
+  }
+
+  async deletePerformanceAssignmentsByPersonnelAndDate(personnelId: string, date: string): Promise<boolean> {
+    const result = await db.delete(performanceAssignments).where(and(
+      eq(performanceAssignments.personnelId, personnelId),
+      eq(performanceAssignments.date, date)
+    ));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Base Profiles
+  async getBaseProfile(userId: string): Promise<BaseProfile | undefined> {
+    const [profile] = await db.select().from(baseProfiles).where(eq(baseProfiles.userId, userId));
+    return profile || undefined;
+  }
+
+  async createBaseProfile(insertProfile: InsertBaseProfile): Promise<BaseProfile> {
+    const [profile] = await db.insert(baseProfiles).values({
+      ...insertProfile,
+      isComplete: insertProfile.isComplete ?? false
+    }).returning();
+    return profile;
+  }
+
+  async updateBaseProfile(userId: string, updates: Partial<InsertBaseProfile>): Promise<BaseProfile | undefined> {
+    const [profile] = await db.update(baseProfiles).set(updates).where(eq(baseProfiles.userId, userId)).returning();
+    return profile || undefined;
+  }
+
+  // Performance Logs
+  async getPerformanceLog(id: string): Promise<PerformanceLog | undefined> {
+    const [log] = await db.select().from(performanceLogs).where(eq(performanceLogs.id, id));
+    return log || undefined;
+  }
+
+  async getPerformanceLogByUserAndPeriod(userId: string, year: number, month: number): Promise<PerformanceLog | undefined> {
+    const [log] = await db.select().from(performanceLogs).where(and(
+      eq(performanceLogs.userId, userId),
+      eq(performanceLogs.year, year),
+      eq(performanceLogs.month, month)
+    ));
+    return log || undefined;
+  }
+
+  async createPerformanceLog(insertLog: InsertPerformanceLog): Promise<PerformanceLog> {
+    const [log] = await db.insert(performanceLogs).values({
+      ...insertLog,
+      status: insertLog.status ?? "draft"
+    }).returning();
+    return log;
+  }
+
+  async updatePerformanceLog(id: string, updates: Partial<InsertPerformanceLog>): Promise<PerformanceLog | undefined> {
+    const [log] = await db.update(performanceLogs).set(updates).where(eq(performanceLogs.id, id)).returning();
+    return log || undefined;
+  }
+
+  async finalizePerformanceLog(id: string): Promise<PerformanceLog | undefined> {
+    const [log] = await db.update(performanceLogs).set({
+      status: "finalized",
+      submittedAt: new Date()
+    }).where(eq(performanceLogs.id, id)).returning();
+    return log || undefined;
+  }
+
+  async deletePerformanceLog(id: string): Promise<boolean> {
+    const result = await db.delete(performanceLogs).where(eq(performanceLogs.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async getPerformanceLogsByUser(userId: string): Promise<PerformanceLog[]> {
+    return await db.select().from(performanceLogs).where(eq(performanceLogs.userId, userId)).orderBy(desc(performanceLogs.createdAt));
+  }
+
+  // Performance Entries
+  async getPerformanceEntry(id: string): Promise<PerformanceEntry | undefined> {
+    const [entry] = await db.select().from(performanceEntries).where(eq(performanceEntries.id, id));
+    return entry || undefined;
+  }
+
+  async getPerformanceEntriesByLog(logId: string): Promise<PerformanceEntry[]> {
+    return await db.select().from(performanceEntries).where(eq(performanceEntries.logId, logId));
+  }
+
+  async getPerformanceEntriesByUser(userId: string, year?: number, month?: number): Promise<PerformanceEntry[]> {
+    if (year !== undefined && month !== undefined) {
+      return await db.select().from(performanceEntries).where(and(
+        eq(performanceEntries.userId, userId),
+        eq(performanceEntries.year, year),
+        eq(performanceEntries.month, month)
+      ));
+    }
+    
+    return await db.select().from(performanceEntries).where(eq(performanceEntries.userId, userId));
+  }
+
+  async createPerformanceEntry(insertEntry: InsertPerformanceEntry): Promise<PerformanceEntry> {
+    const [entry] = await db.insert(performanceEntries).values({
+      ...insertEntry,
+      entryType: insertEntry.entryType ?? "cell",
+      missions: insertEntry.missions ?? 0,
+      meals: insertEntry.meals ?? 0,
+      isFinalized: insertEntry.isFinalized ?? false
+    }).returning();
+    return entry;
+  }
+
+  async updatePerformanceEntry(id: string, updates: Partial<InsertPerformanceEntry>): Promise<PerformanceEntry | undefined> {
+    const [entry] = await db.update(performanceEntries).set(updates).where(eq(performanceEntries.id, id)).returning();
+    return entry || undefined;
+  }
+
+  async deletePerformanceEntry(id: string): Promise<boolean> {
+    const result = await db.delete(performanceEntries).where(eq(performanceEntries.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async batchCreateOrUpdatePerformanceEntries(logId: string, entries: InsertPerformanceEntry[]): Promise<PerformanceEntry[]> {
+    const results: PerformanceEntry[] = [];
+    
+    for (const entryData of entries) {
+      // Check if entry already exists for this log, personnel, and date
+      const [existing] = await db.select().from(performanceEntries).where(and(
+        eq(performanceEntries.logId, logId),
+        eq(performanceEntries.personnelId, entryData.personnelId),
+        eq(performanceEntries.date, entryData.date || "")
+      ));
+      
+      if (existing) {
+        // Update existing entry
+        const updated = await this.updatePerformanceEntry(existing.id, entryData);
+        if (updated) results.push(updated);
+      } else {
+        // Create new entry
+        const created = await this.createPerformanceEntry({ ...entryData, logId });
+        results.push(created);
+      }
+    }
+    
+    return results;
+  }
+
+  // Iran Holidays
+  async getHolidaysByMonth(year: number, month: number): Promise<IranHoliday[]> {
+    return await db.select().from(iranHolidays).where(and(
+      eq(iranHolidays.year, year),
+      eq(iranHolidays.month, month)
+    ));
+  }
+
+  async createHoliday(insertHoliday: InsertIranHoliday): Promise<IranHoliday> {
+    const [holiday] = await db.insert(iranHolidays).values({
+      ...insertHoliday,
+      isOfficial: insertHoliday.isOfficial ?? true
+    }).returning();
+    return holiday;
+  }
+
+  async deleteHoliday(id: string): Promise<boolean> {
+    const result = await db.delete(iranHolidays).where(eq(iranHolidays.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Base Members
+  async getBaseMembersByUser(userId: string): Promise<Personnel[]> {
+    const memberRecords = await db.select().from(baseMembers).where(eq(baseMembers.userId, userId));
+    const personnelIds = memberRecords.map(member => member.personnelId);
+    
+    if (personnelIds.length === 0) return [];
+    
+    return await db.select().from(personnel).where(inArray(personnel.id, personnelIds));
+  }
+
+  async addBaseMember(userId: string, personnelId: string): Promise<BaseMember> {
+    // Check if this combination already exists
+    const [existing] = await db.select().from(baseMembers).where(and(
+      eq(baseMembers.userId, userId),
+      eq(baseMembers.personnelId, personnelId)
+    ));
+    
+    if (existing) {
+      throw new Error("This personnel is already a base member");
+    }
+
+    const [member] = await db.insert(baseMembers).values({
+      userId,
+      personnelId
+    }).returning();
+    return member;
+  }
+
+  async removeBaseMember(userId: string, personnelId: string): Promise<boolean> {
+    const result = await db.delete(baseMembers).where(and(
+      eq(baseMembers.userId, userId),
+      eq(baseMembers.personnelId, personnelId)
+    ));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+}
+
+export const storage = new DatabaseStorage();
