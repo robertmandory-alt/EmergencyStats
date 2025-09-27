@@ -29,7 +29,7 @@ export function CellEditorModal({
   workShifts,
   onSave
 }: CellEditorModalProps) {
-  const [selectedShiftId, setSelectedShiftId] = useState<string>("");
+  const [selectedShiftId, setSelectedShiftId] = useState<string>("none");
   const [isLoading, setIsLoading] = useState(false);
 
   const { 
@@ -46,9 +46,9 @@ export function CellEditorModal({
   // Reset form when modal opens/closes or personnel changes
   useEffect(() => {
     if (isOpen && personnel) {
-      setSelectedShiftId(existingEntry?.shiftId || "");
+      setSelectedShiftId(existingEntry?.shiftId || "none");
     } else {
-      setSelectedShiftId("");
+      setSelectedShiftId("none");
     }
   }, [isOpen, personnel, existingEntry]);
 
@@ -57,7 +57,7 @@ export function CellEditorModal({
 
     setIsLoading(true);
     try {
-      await onSave(personnel.id, date, selectedShiftId || null);
+      await onSave(personnel.id, date, selectedShiftId === "none" ? null : selectedShiftId);
       onClose();
     } catch (error) {
       console.error("Error saving shift assignment:", error);
@@ -160,7 +160,7 @@ export function CellEditorModal({
                 <SelectValue placeholder="انتخاب شیفت..." />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="" data-testid="shift-option-none">
+                <SelectItem value="none" data-testid="shift-option-none">
                   بدون شیفت
                 </SelectItem>
                 {workShifts.map((shift) => (
@@ -229,7 +229,7 @@ export function CellEditorModal({
           
           <Button
             onClick={handleSave}
-            disabled={isLoading || isFinalized || selectedShiftId === (existingEntry?.shiftId || "")}
+            disabled={isLoading || isFinalized || selectedShiftId === (existingEntry?.shiftId || "none")}
             data-testid="button-save"
           >
             {isLoading ? "در حال ذخیره..." : "ذخیره"}
